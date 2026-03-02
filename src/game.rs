@@ -5,6 +5,12 @@ use crate::Assets;
 
 pub const VIRTUAL_HEIGHT: f32 = 100.0;
 
+pub fn get_camera() -> Camera2D {
+    let aspect_ratio = screen_width() / screen_height();
+    let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
+    Camera2D::from_display_rect(Rect::new(0.0, VIRTUAL_HEIGHT, virtual_width, -VIRTUAL_HEIGHT))
+}
+
 pub struct Game {
     pub background: Texture2D,
     pub player: Player,
@@ -20,7 +26,8 @@ impl Game {
     }
 
     pub fn update(&mut self) {
-        self.player.update();
+        let camera = get_camera();
+        self.player.update(&camera);
     }
 
     pub fn draw(&mut self) {
