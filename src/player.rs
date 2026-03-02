@@ -62,13 +62,28 @@ impl Player {
         self.liste_projectiles.push(nouveau_tir);
     }
 
+    pub fn verifier_degats_explosions(&mut self, explosions_actives: &mut Vec<Explosion>) {
+        for explosion in explosions_actives {
+            // Si l'explosion n'a pas encore touché CE joueur
+            if !explosion.a_fait_des_degats {
+                if self.hitbox.overlaps(&explosion.get_hitbox()) {
+                    
+                    self.take_damage(explosion.degats);
+                    
+                    // On marque l'explosion pour dire qu'elle a déjà frappé
+                    explosion.a_fait_des_degats = true;
+                }
+            }
+        }
+    }
+
     pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>) {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////A SUPPRIMER V FINALE
-        if is_key_down(KeyCode::P){
+        if is_key_pressed(KeyCode::P){
             self.heal(5.);
         }
-        if is_key_down(KeyCode::M){
+        if is_key_pressed(KeyCode::M){
             self.take_damage(5.);
         }
         //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -184,6 +199,11 @@ impl Player {
         for explosion in &mut self.explosions{
             explosion.update(dt);
         }
+        
+        let mut mes_explosions = std::mem::take(&mut self.explosions);
+        self.verifier_degats_explosions(&mut mes_explosions);
+        self.explosions = mes_explosions;
+
         self.explosions.retain(|expl| expl.timer > 0.0);
 
     }
