@@ -26,7 +26,7 @@ impl Player {
             liste_projectiles: Vec::new(),
             explosions: Vec::new(),
             PV : 25.,
-            physics : Physics::new(50., 0.5),
+            physics : Physics::new(200., 0.5),
             jump_available: 2
          }
 
@@ -108,7 +108,7 @@ impl Player {
         if self.jump_available>0{
             if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Space){
                 //println!("🕹️ SAUT DÉCLENCHÉ ! (Touches détectées)");
-                self.physics.jump(50.);
+                self.physics.jump(100.);
                 self.jump_available -= 1;
                 }
             
