@@ -45,7 +45,7 @@ impl Animation {
         }
 
         // Gestion du timer
-        let dt = get_frame_time();
+        let dt = get_frame_time().min(0.05);
         self.timer -= dt;
 
         // Changement de frame

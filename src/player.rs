@@ -3,6 +3,7 @@ use crate::explosion::{self, Explosion};
 use crate::projectile::Projectile;
 use crate::{assets, boilerplate::animation::Animation};
 use crate::boilerplate::physics::Physics;
+use crate::game::VIRTUAL_HEIGHT;
 
 pub struct Player {
     animation: Animation,
@@ -10,19 +11,23 @@ pub struct Player {
     pub speed: f32,
     pub liste_projectiles: Vec<Projectile>,
     pub explosions: Vec<Explosion>,
-    PV : f32
+    PV : f32,
+    physics : Physics,
+    jump_available: i32
     
 }
 
 impl Player {
     pub fn new(spritesheet: Texture2D) -> Self {
         Self {
-            speed: 10.0,
+            speed: 50.0,
             hitbox: Rect::new(0.0,0.0,10.0,10.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
             liste_projectiles: Vec::new(),
             explosions: Vec::new(),
-            PV : 25.
+            PV : 25.,
+            physics : Physics::new(50., 0.5),
+            jump_available: 2
          }
 
     }
@@ -38,27 +43,35 @@ impl Player {
     }
 
     pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>) {
-        let dt = get_frame_time();
+        let dt = get_frame_time().min(0.05);
 
         // --- MOUVEMENTS ZQSD ---
         if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) { self.hitbox.x += self.speed * dt; }
         if is_key_down(KeyCode::Left) || is_key_down(KeyCode::Q) { self.hitbox.x -= self.speed * dt; }
-        if is_key_down(KeyCode::Up) || is_key_down(KeyCode::Z) { self.hitbox.y -= self.speed * dt; }
-        if is_key_down(KeyCode::Down) || is_key_down(KeyCode::S) { self.hitbox.y += self.speed * dt; }
+        //if is_key_down(KeyCode::Up) || is_key_down(KeyCode::Z) { self.hitbox.y -= self.speed * dt; }
+        if self.jump_available>0{
+            if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::Z) {
+                println!("🕹️ SAUT DÉCLENCHÉ ! (Touches détectées)");
+                self.physics.jump(50.);
+                self.jump_available -= 1;
+                }
+            
+        }
+        
+        //if is_key_down(KeyCode::Down) || is_key_down(KeyCode::S) { self.hitbox.y += self.speed * dt; }
+
+        //--- GRAVITE ---
+        self.physics.apply_physics(&mut self.hitbox);
 
         // --- LOGIQUE DE TIR ---
         if is_mouse_button_pressed(MouseButton::Left) {
             self.tirer_projectile(camera);
         }
 
-        // --- MISE À JOUR DES PROJECTILES ---
-        for proj in &mut self.liste_projectiles {
-            proj.update(dt);
-        }
-
+        //--- DEFINITION DES HITBOXES ----
         let aspect_ratio = screen_width() / screen_height();
-        let virtual_width = 100.0 * aspect_ratio; 
-        let virtual_height = 100.0;
+        let virtual_width = VIRTUAL_HEIGHT * aspect_ratio; 
+        let virtual_height = VIRTUAL_HEIGHT;
 
         let epaisseur = 50.0;
         let mur_gauche = Rect::new(-epaisseur, 0.0, epaisseur, virtual_height);
@@ -68,6 +81,21 @@ impl Player {
 
         // On les met dans un tableau pour les tester facilement
         let hitboxes_murs = vec![mur_gauche, mur_droit, mur_haut, mur_bas];
+
+        //--- COLISION
+        if self.hitbox.y > VIRTUAL_HEIGHT - self.hitbox.h {
+            self.hitbox.y = VIRTUAL_HEIGHT - self.hitbox.h;
+            self.physics.set_velocity_y(0.);
+            self.jump_available = 2;
+        }
+
+        
+        // --- MISE À JOUR DES PROJECTILES ---
+        for proj in &mut self.liste_projectiles {
+            proj.update(dt);
+        }
+
+        
 
         // 2. ÉTAPE A : Détecter les collisions avec Macroquad (overlaps)
         for proj in &self.liste_projectiles {
