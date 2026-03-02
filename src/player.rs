@@ -9,7 +9,7 @@ pub struct Player {
     pub speed: f32,
     pub liste_projectiles: Vec<Projectile>,
     pub explosions: Vec<Explosion>,
-
+    PV : f32
 }
 
 impl Player {
@@ -19,7 +19,8 @@ impl Player {
             hitbox: Rect::new(0.0,0.0,10.0,10.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
             liste_projectiles: Vec::new(),
-            explosions: Vec::new()
+            explosions: Vec::new(),
+            PV : 25.
          }
 
     }
@@ -97,10 +98,18 @@ impl Player {
 
     }
 
+    pub fn draw_healthbar(&mut self){
+        let width:f32 = 6.;
+        
+        draw_rectangle(self.hitbox.x + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*self.PV/100., 0.3, GREEN);
+        draw_rectangle(self.hitbox.x + width*self.PV/100. + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*(100.-self.PV)/100., 0.3, RED);
+    }
+
 
 
     pub fn draw(&mut self) {
         self.animation.draw_current_frame(self.hitbox.x, self.hitbox.y, 10., 10., true);
+        self.draw_healthbar();
         
         for proj in &mut self.liste_projectiles {
             proj.draw();
