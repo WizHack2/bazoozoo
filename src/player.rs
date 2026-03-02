@@ -34,7 +34,7 @@ impl Player {
         self.liste_projectiles.push(nouveau_tir);
     }
 
-    pub fn update(&mut self, camera: &Camera2D) {
+    pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>) {
         let dt = get_frame_time();
 
         // --- MOUVEMENTS ZQSD ---
@@ -70,10 +70,11 @@ impl Player {
         for proj in &self.liste_projectiles {
             let hitbox_proj = proj.get_hitbox();
             
-            // On vérifie si la hitbox du projectile touche (overlaps) UNE des hitboxes des murs
+            // On vérifie si la hitbox du projectile touche (overlaps) UNE des hitboxes des murs ou de la map
+            let a_touche_la_map : bool = wallmap.iter().any(|wall| hitbox_proj.overlaps(wall));
             let a_touche_un_mur = hitboxes_murs.iter().any(|mur| hitbox_proj.overlaps(mur));
 
-            if a_touche_un_mur {
+            if a_touche_un_mur || a_touche_la_map {
                 self.explosions.push(Explosion::new(proj.x, proj.y));
             }
         }
@@ -83,6 +84,10 @@ impl Player {
         self.liste_projectiles.retain(|proj| {
             let hitbox_proj = proj.get_hitbox();
             !hitboxes_murs.iter().any(|mur| hitbox_proj.overlaps(mur))
+        });
+        self.liste_projectiles.retain(|proj| {
+            let hitbox_proj = proj.get_hitbox();
+            !wallmap.iter().any(|mur| hitbox_proj.overlaps(mur))
         });
 
         for explosion in &mut self.explosions{

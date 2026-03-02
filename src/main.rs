@@ -6,6 +6,7 @@ mod boilerplate;
 mod assets;
 mod projectile;
 mod explosion;
+mod map_loading;
 
 use game::Game;
 use assets::Assets;

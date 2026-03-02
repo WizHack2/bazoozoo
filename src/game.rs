@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 
+use crate::map_loading::charger_hitboxes;
 use crate::player::*;
 use crate::Assets;
 
@@ -14,6 +15,7 @@ pub fn get_camera() -> Camera2D {
 pub struct Game {
     pub background: Texture2D,
     pub player: Player,
+    pub wallmap: Vec<Rect>
 }
 
 impl Game {
@@ -22,12 +24,13 @@ impl Game {
         Self {
             background: assets.background.clone(),
             player: Player::new(assets.player.clone()),
+            wallmap: charger_hitboxes("assets/map1.json".to_string())
         }
     }
 
     pub fn update(&mut self) {
         let camera = get_camera();
-        self.player.update(&camera);
+        self.player.update(&camera,&self.wallmap);
     }
 
     pub fn draw(&mut self) {
@@ -47,6 +50,10 @@ impl Game {
                 ..Default::default()
             }
         );
+        for wall in self.wallmap.clone() {
+            draw_rectangle(wall.x,wall.y, wall.w,wall.h, GRAY);
+        }
+        
         
         self.player.draw();
 
