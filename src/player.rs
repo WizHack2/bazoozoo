@@ -33,6 +33,7 @@ impl Player {
     }
 
     fn tirer_projectile(&mut self, camera: &Camera2D) {
+        
         let mouse_pos = mouse_position();
         let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
         
@@ -43,15 +44,23 @@ impl Player {
     }
 
     pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>) {
-        let dt = get_frame_time().min(0.05);
+        //println!("{:?}",self.physics.get_velocity());
+        let dt = get_frame_time().clamp(0.001, 0.05);
 
         // --- MOUVEMENTS ZQSD ---
         if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) { self.hitbox.x += self.speed * dt; }
+        if wallmap.iter().any(|wall| self.hitbox.overlaps(wall)){
+             self.hitbox.x -= self.speed * dt; 
+        }
+
         if is_key_down(KeyCode::Left) || is_key_down(KeyCode::Q) { self.hitbox.x -= self.speed * dt; }
+        if wallmap.iter().any(|wall| self.hitbox.overlaps(wall)){
+             self.hitbox.x += self.speed * dt; 
+        }
         //if is_key_down(KeyCode::Up) || is_key_down(KeyCode::Z) { self.hitbox.y -= self.speed * dt; }
         if self.jump_available>0{
-            if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::Z) {
-                println!("🕹️ SAUT DÉCLENCHÉ ! (Touches détectées)");
+            if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Space){
+                //println!("🕹️ SAUT DÉCLENCHÉ ! (Touches détectées)");
                 self.physics.jump(50.);
                 self.jump_available -= 1;
                 }
@@ -61,7 +70,10 @@ impl Player {
         //if is_key_down(KeyCode::Down) || is_key_down(KeyCode::S) { self.hitbox.y += self.speed * dt; }
 
         //--- GRAVITE ---
+        let old_y = self.hitbox.y;
         self.physics.apply_physics(&mut self.hitbox);
+        let dy = self.hitbox.y - old_y; //Pour calculer la direction de la collision (si on tombe ou si on monte)
+
 
         // --- LOGIQUE DE TIR ---
         if is_mouse_button_pressed(MouseButton::Left) {
@@ -87,6 +99,22 @@ impl Player {
             self.hitbox.y = VIRTUAL_HEIGHT - self.hitbox.h;
             self.physics.set_velocity_y(0.);
             self.jump_available = 2;
+        }
+
+        for wall in wallmap {
+            if self.hitbox.overlaps(wall) {
+                ///let vy = self.physics.get_velocity();
+                if dy > 0.0 {
+                    // On tombe. On se pose PILE sur le mur.
+                    self.hitbox.y = wall.y - self.hitbox.h;
+                    self.physics.set_velocity_y(0.0);
+                    self.jump_available = 2; // BINGO ! On récupère nos sauts ici !
+                } else if dy < 0.0 {
+                    // On monte (on se cogne la tête). On se colle PILE sous le mur.
+                    self.hitbox.y = wall.y + wall.h;
+                    self.physics.set_velocity_y(0.0);
+                }
+            }
         }
 
         

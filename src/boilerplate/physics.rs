@@ -16,11 +16,15 @@ impl Physics {
     }
 
     pub fn apply_physics(&mut self, hurtbox: &mut Rect) {
-        let dt = get_frame_time().min(0.05);
+        let dt = get_frame_time().clamp(0.001, 0.05);
         hurtbox.x += self.velocity.x * dt;
         hurtbox.y += self.velocity.y * dt;
         self.apply_gravity();
         self.apply_friction();
+    }
+
+    pub fn get_velocity(& self)-> f32{
+        self.velocity.y
     }
 
     pub fn jump(&mut self, jump_force: f32) {
@@ -28,12 +32,12 @@ impl Physics {
     }
 
     pub fn apply_gravity(&mut self) {
-        let dt = get_frame_time().min(0.05);
+        let dt = get_frame_time().clamp(0.001, 0.05);
         self.velocity.y += self.gravity_force * dt;
     }
 
     pub fn apply_friction(&mut self) {
-        let dt = get_frame_time().min(0.05);
+        let dt = get_frame_time().clamp(0.001, 0.05);
         let friction = self.friction_force * dt;
 
         if self.velocity.x == 0. {
