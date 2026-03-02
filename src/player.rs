@@ -2,6 +2,7 @@ use macroquad::prelude::*;
 use crate::explosion::{self, Explosion};
 use crate::projectile::Projectile;
 use crate::{assets, boilerplate::animation::Animation};
+use crate::boilerplate::physics::Physics;
 
 pub struct Player {
     animation: Animation,
@@ -10,6 +11,7 @@ pub struct Player {
     pub liste_projectiles: Vec<Projectile>,
     pub explosions: Vec<Explosion>,
     PV : f32
+    
 }
 
 impl Player {
@@ -98,7 +100,7 @@ impl Player {
 
     }
 
-    pub fn draw_healthbar(&mut self){
+    pub fn draw_healthbar(& self){
         let width:f32 = 6.;
         
         draw_rectangle(self.hitbox.x + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*self.PV/100., 0.3, GREEN);

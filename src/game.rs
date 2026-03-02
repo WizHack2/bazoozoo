@@ -24,7 +24,7 @@ impl Game {
         Self {
             background: assets.background.clone(),
             player: Player::new(assets.player.clone()),
-            wallmap: charger_hitboxes("assets/map1.json".to_string())
+            wallmap: charger_hitboxes("assets/map2.json".to_string())
         }
     }
 
