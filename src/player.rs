@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use crate::explosion::{self, Explosion};
 use crate::projectile::Projectile;
 use crate::{assets, boilerplate::animation::Animation};
 
@@ -6,7 +7,8 @@ pub struct Player {
     animation: Animation,
     hitbox:Rect,
     pub speed: f32,
-    pub liste_projectiles: Vec<Projectile>
+    pub liste_projectiles: Vec<Projectile>,
+    pub explosions: Vec<Explosion>,
 
 }
 
@@ -16,7 +18,8 @@ impl Player {
             speed: 10.0,
             hitbox: Rect::new(0.0,0.0,10.0,10.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
-            liste_projectiles: vec![]
+            liste_projectiles: Vec::new(),
+            explosions: Vec::new()
          }
 
     }
@@ -49,6 +52,44 @@ impl Player {
         for proj in &mut self.liste_projectiles {
             proj.update(dt);
         }
+
+        let aspect_ratio = screen_width() / screen_height();
+        let virtual_width = 100.0 * aspect_ratio; 
+        let virtual_height = 100.0;
+
+        let epaisseur = 50.0;
+        let mur_gauche = Rect::new(-epaisseur, 0.0, epaisseur, virtual_height);
+        let mur_droit  = Rect::new(virtual_width, 0.0, epaisseur, virtual_height);
+        let mur_haut   = Rect::new(-epaisseur, -epaisseur, virtual_width + epaisseur * 2.0, epaisseur);
+        let mur_bas    = Rect::new(-epaisseur, virtual_height, virtual_width + epaisseur * 2.0, epaisseur);
+
+        // On les met dans un tableau pour les tester facilement
+        let hitboxes_murs = vec![mur_gauche, mur_droit, mur_haut, mur_bas];
+
+        // 2. ÉTAPE A : Détecter les collisions avec Macroquad (overlaps)
+        for proj in &self.liste_projectiles {
+            let hitbox_proj = proj.get_hitbox();
+            
+            // On vérifie si la hitbox du projectile touche (overlaps) UNE des hitboxes des murs
+            let a_touche_un_mur = hitboxes_murs.iter().any(|mur| hitbox_proj.overlaps(mur));
+
+            if a_touche_un_mur {
+                self.explosions.push(Explosion::new(proj.x, proj.y));
+            }
+        }
+
+        // 3. ÉTAPE B : La méthode magique RETAIN avec les hitboxes
+        // On garde uniquement les projectiles dont la hitbox NE TOUCHE PAS les murs
+        self.liste_projectiles.retain(|proj| {
+            let hitbox_proj = proj.get_hitbox();
+            !hitboxes_murs.iter().any(|mur| hitbox_proj.overlaps(mur))
+        });
+
+        for explosion in &mut self.explosions{
+            explosion.update(dt);
+        }
+        self.explosions.retain(|expl| expl.timer > 0.0);
+
     }
 
 
@@ -58,6 +99,10 @@ impl Player {
         
         for proj in &mut self.liste_projectiles {
             proj.draw();
+        }
+
+        for explosion in &mut self.explosions{
+            explosion.draw()
         }
     }
 }

@@ -5,6 +5,7 @@ mod player;
 mod boilerplate;
 mod assets;
 mod projectile;
+mod explosion;
 
 use game::Game;
 use assets::Assets;
