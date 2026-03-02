@@ -32,6 +32,25 @@ impl Player {
 
     }
 
+    pub fn take_damage(&mut self,val:f32){
+        if self.PV - val < 0. {
+            self.PV = 0.;
+        }
+        else{
+            self.PV -= val;
+        }
+    }
+
+    pub fn heal(&mut self,val:f32){
+        if self.PV + val > 100. {
+            self.PV = 100.;
+        }
+        else{
+            self.PV += val;
+        }
+    }
+
+
     fn tirer_projectile(&mut self, camera: &Camera2D) {
         
         let mouse_pos = mouse_position();
@@ -44,6 +63,19 @@ impl Player {
     }
 
     pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>) {
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////
+        if is_key_down(KeyCode::P){
+            self.heal(5.);
+        }
+        if is_key_down(KeyCode::M){
+            self.take_damage(5.);
+        }
+        //////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
         //println!("{:?}",self.physics.get_velocity());
         let dt = get_frame_time().clamp(0.001, 0.05);
 
