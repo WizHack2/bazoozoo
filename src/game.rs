@@ -15,31 +15,34 @@ pub fn get_camera() -> Camera2D {
 
 pub struct Game {
     pub background: Texture2D,
-    pub players: Vec<Player>,
+    pub player: Player,
     pub wallmap: Vec<Rect>,
+    pub other_players: Vec<Player>
 }
 
 impl Game {
     pub fn new(assets: &Assets) -> Self {
         set_fullscreen(true);
-        let player = Player::new(assets.player.clone());
-        let mut players = Vec::new();
-        players.push(player);
         Self {
             background: assets.background.clone(),
+            player: Player::new(assets.player.clone()),
             wallmap: charger_hitboxes("assets/map2.json".to_string()),
-            players,
+            other_players: Vec::new()
+        }
+    }
+
+    pub fn add_player(&mut self,Player_a_ajouter:Player){
+        if self.other_players.len()>3{
+            println!("erreur nombre max de joueur atteint");
+        }
+        else{
+        self.other_players.push(Player_a_ajouter);
         }
     }
 
     pub fn update(&mut self) {
         let camera = get_camera();
-
-        for i in 0..self.players.len() {
-            let mut player = self.players.remove(i); // On gere chaque joueur par rapport aux autres.
-            player.update(&camera, &self.wallmap, &mut self.players);
-            self.players.insert(i, player);
-        }
+        self.player.update(&camera,&self.wallmap, &mut self.other_players);
     }
 
     pub fn draw(&mut self) {
@@ -63,8 +66,10 @@ impl Game {
             draw_rectangle(wall.x,wall.y, wall.w,wall.h, GRAY);
         }
         
-        for player in &self.players {
-            player.draw();
+        
+        self.player.draw();
+        for player in &self.other_players{
+            player.draw()
         }
 
         // --- DESSIN DE L'UI (Sans la caméra) ---
