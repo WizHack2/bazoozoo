@@ -15,7 +15,8 @@ pub fn get_camera() -> Camera2D {
 pub struct Game {
     pub background: Texture2D,
     pub player: Player,
-    pub wallmap: Vec<Rect>
+    pub wallmap: Vec<Rect>,
+    pub other_players: Vec<Player>
 }
 
 impl Game {
@@ -24,13 +25,24 @@ impl Game {
         Self {
             background: assets.background.clone(),
             player: Player::new(assets.player.clone()),
-            wallmap: charger_hitboxes("assets/map2.json".to_string())
+            wallmap: charger_hitboxes("assets/map2.json".to_string()),
+            other_players: Vec::new()
+        }
+    }
+
+    pub fn add_player(&mut self,Player_a_ajouter:Player){
+        if self.other_players.len()>3{
+            println!("erreur nombre max de joueur atteint");
+        }
+        else{
+        self.other_players.push(Player_a_ajouter);
         }
     }
 
     pub fn update(&mut self) {
         let camera = get_camera();
         self.player.update(&camera,&self.wallmap);
+        
     }
 
     pub fn draw(&mut self) {
@@ -56,6 +68,9 @@ impl Game {
         
         
         self.player.draw();
+        for mut player in &mut self.other_players{
+            player.draw()
+        }
 
         // --- DESSIN DE L'UI (Sans la caméra) ---
         set_default_camera();
