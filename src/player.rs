@@ -202,6 +202,9 @@ impl Player {
         
         let mut mes_explosions = std::mem::take(&mut self.explosions);
         self.verifier_degats_explosions(&mut mes_explosions);
+
+        //-----ICI METTRE LES EXPLOSIONS DES AUTRES JOUEURS------//
+
         self.explosions = mes_explosions;
 
         self.explosions.retain(|expl| expl.timer > 0.0);
