@@ -49,24 +49,17 @@ impl Game {
         // --- CONFIGURATION CAMERA ---
         let aspect_ratio = screen_width() / screen_height();
         let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
-
         let camera = Camera2D::from_display_rect(Rect::new(0.0, VIRTUAL_HEIGHT, virtual_width, -VIRTUAL_HEIGHT)); // Le 0 de la caméra est placé en bas a droite de l'écran pour qu'on garde une logiqe de y diminue quand on monte.
+
         // --- DESSIN DU MONDE (Avec la caméra) ---
         set_camera(&camera);
-        
         clear_background(BLACK);
-        draw_texture_ex(
-            &self.background, 0., 0., WHITE,
-            DrawTextureParams {
-                dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)),
-                ..Default::default()
-            }
-        );
-        for wall in self.wallmap.clone() {
-            draw_rectangle(wall.x,wall.y, wall.w,wall.h, GRAY);
-        }
-        
-        
+
+        // --- DESSIN DU BACKGROUND ---
+        draw_texture_ex(&self.background, 0., 0., WHITE,DrawTextureParams {dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)),..Default::default()});
+        // --- DESSIN DES MURS ---
+        for wall in &self.wallmap { draw_rectangle(wall.x,wall.y, wall.w,wall.h, GRAY); }
+        // --- DESSIN DES JOUEURS ---
         self.player.draw();
         for player in &self.other_players{
             player.draw()
