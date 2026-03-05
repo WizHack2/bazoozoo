@@ -18,7 +18,7 @@ pub struct Player {
 impl Player {
     pub fn new(spritesheet: Texture2D) -> Self {
         Self {
-            id: 0,
+            id: macroquad::rand::rand() as i32,
             speed: 50.0,
             hitbox: Rect::new(0.0,0.0,10.0,10.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),

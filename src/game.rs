@@ -5,7 +5,7 @@ use crate::map_loading::charger_hitboxes;
 use crate::player;
 use crate::player::*;
 use crate::Assets;
-use crate::projectile::Projectile;
+use crate::boilerplate::network::PlayerState;
 
 pub const VIRTUAL_HEIGHT: f32 = 100.0;
 
@@ -62,6 +62,21 @@ impl Game {
         }
         else{
         self.other_players.push(Player_a_ajouter);
+        }
+    }
+
+    pub fn sync_network(&mut self, states: Vec<PlayerState>, player_tex: Texture2D) {
+        for state in states {
+            if let Some(p) = self.other_players.iter_mut().find(|p| p.id == state.id) {
+                p.hitbox.x = state.x;
+                p.hitbox.y = state.y;
+            } else {
+                let mut new_p = Player::new(player_tex.clone());
+                new_p.id = state.id;
+                new_p.hitbox.x = state.x;
+                new_p.hitbox.y = state.y;
+                self.other_players.push(new_p);
+            }
         }
     }
 
