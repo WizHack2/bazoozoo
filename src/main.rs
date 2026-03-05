@@ -24,7 +24,7 @@ async fn main() {
     let mut game = Game::new(&assets,true);
 
     // Init connexion partie
-    let mut network = NetworkManager::new("wss://matchbox.machengine.org/skibididobdobyesboubakar").await;
+    let mut network = NetworkManager::new("ws://127.0.0.1:3536/salle_privee").await;
     
     loop {
         clear_background(BLACK);

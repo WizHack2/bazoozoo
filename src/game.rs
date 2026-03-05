@@ -6,6 +6,7 @@ use crate::player;
 use crate::player::*;
 use crate::Assets;
 use crate::boilerplate::network::PlayerState;
+use crate::projectile::Projectile;
 
 pub const VIRTUAL_HEIGHT: f32 = 100.0;
 
