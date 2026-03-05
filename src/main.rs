@@ -19,7 +19,7 @@ async fn main() {
     let assets = Assets::load().await;
 
     // Init de la partie
-    let mut game = Game::new(&assets);
+    let mut game = Game::new(&assets,true);
     
     loop {
         clear_background(BLACK);

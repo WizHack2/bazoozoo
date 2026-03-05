@@ -10,7 +10,7 @@ pub struct Player {
     pub hitbox:Rect,
     pub speed: f32,
     pub projectiles: Vec<Projectile>,
-    PV : f32,
+    pub PV : f32,
     physics : Physics,
     jump_available: i32,
 }
@@ -150,8 +150,16 @@ impl Player {
             }
         }
 
+        //for proj in &mut self.projectiles {
+        //    proj.update(dt, wallmap, &hitboxes_murs, joueurs);
+        //}
+        //self.update_projectile(wallmap, &hitboxes_murs, joueurs,dt);
+
+    }
+
+    pub fn update_projectile(&mut self,wallmap:&Vec<Rect>, hitboxes_murs:&Vec<Rect>,joueurs:&mut Vec<Player>,dt:f32){
         for proj in &mut self.projectiles {
-            proj.update(dt, wallmap, &hitboxes_murs, joueurs);
+            proj.update(dt, wallmap, hitboxes_murs, joueurs);
         }
     }
 
