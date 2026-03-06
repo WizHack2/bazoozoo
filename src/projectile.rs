@@ -10,7 +10,7 @@ pub struct Projectile {
     pub is_exploding: bool,
     pub explosion_duration: f32,
     pub degats: f32,
-    pub player_already_damaged: [bool; 4],
+    pub players_already_damaged: Vec<i32>,
 }
 
 impl Projectile {
@@ -28,7 +28,7 @@ impl Projectile {
             is_exploding: false,
             explosion_duration: 0.2,
             degats: 5.0,
-            player_already_damaged: [false; 4],
+            players_already_damaged: Vec::new(),
         }
     }
 
@@ -60,8 +60,8 @@ impl Projectile {
             for joueur in joueurs {
                 if self.hitbox.overlaps_rect(&joueur.hitbox) {
                     let id = joueur.id as usize;
-                    if !self.player_already_damaged[id] && joueur.id != self.owner_id { // TODO La maniere dont on a géré ca dans le game.rs nécéssite qu'on vérifie autrement pour le knockback du projectile sur le player emetteur
-                        self.player_already_damaged[id] = true;
+                    if !self.players_already_damaged.contains(&joueur.id) && joueur.id != self.owner_id { 
+                        self.players_already_damaged.push(joueur.id); // On l'ajoute
                         joueur.take_damage(self.degats);
                     }
                 }

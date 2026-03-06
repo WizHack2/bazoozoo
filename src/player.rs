@@ -87,7 +87,7 @@ impl Player {
     }
 
 
-    pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>, joueurs: &mut Vec<Player>) {
+    pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>, joueurs: &mut Vec<Player>,is_host: bool) {
         let dt = get_frame_time().clamp(0.001, 0.05);
 
         self.handle_input(dt, wallmap);
@@ -109,7 +109,7 @@ impl Player {
 
 
         // --- LOGIQUE DE TIR ---
-        if is_mouse_button_pressed(MouseButton::Left) {
+        if is_host && is_mouse_button_pressed(MouseButton::Left) {
             self.tirer_projectile(camera);
         }
 

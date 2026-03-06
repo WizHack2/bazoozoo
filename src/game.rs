@@ -5,8 +5,8 @@ use crate::map_loading::charger_hitboxes;
 use crate::player;
 use crate::player::*;
 use crate::Assets;
-use crate::boilerplate::network::PlayerState;
 use crate::projectile::Projectile;
+use crate::boilerplate::network::{PlayerState, NetworkManager, GameMessage};
 
 pub const VIRTUAL_HEIGHT: f32 = 100.0;
 
@@ -14,6 +14,8 @@ pub const VIRTUAL_HEIGHT: f32 = 100.0;
 pub struct NetworkProjectile {
     pub x: f32,
     pub y: f32,
+    pub r: f32,
+    pub is_exploding: bool,
 }
 
 // On modifie NetworkPlayer pour qu'il ait des poches pleines de missiles
@@ -23,7 +25,7 @@ pub struct NetworkPlayer {
     pub x: f32,
     pub y: f32,
     pub pv: f32,
-    pub projectiles: Vec<NetworkProjectile>, // <-- NOUVEAU : La liste des missiles !
+    pub projectiles: Vec<NetworkProjectile>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -42,7 +44,12 @@ pub struct Game {
     pub player: Player,
     pub wallmap: Vec<Rect>,
     pub other_players: Vec<Player>,
-    pub is_host :bool
+    pub is_host :bool,
+    //TEST TICK RATE
+    pub last_network_send: f64,
+    pub pending_shot: bool,
+    pub pending_mouse_x: f32,
+    pub pending_mouse_y: f32,
 }
 
 impl Game {
@@ -53,7 +60,12 @@ impl Game {
             player: Player::new(assets.player.clone()),
             wallmap: charger_hitboxes("assets/map2.json".to_string()),
             other_players: Vec::new(),
-            is_host : is_host1
+            is_host : is_host1,
+
+            last_network_send: macroquad::time::get_time(),
+            pending_shot: false,
+            pending_mouse_x: 0.0,
+            pending_mouse_y: 0.0
         }
     }
 
@@ -71,6 +83,19 @@ impl Game {
             if let Some(p) = self.other_players.iter_mut().find(|p| p.id == state.id) {
                 p.hitbox.x = state.x;
                 p.hitbox.y = state.y;
+                
+                // --- NOUVEAU : L'HÔTE CRÉE LE TIR DU CLIENT ---
+                if state.a_tire {
+                    let nouveau_proj = Projectile::new(
+                        state.id, 
+                        p.hitbox.x + p.hitbox.w / 2.0, 
+                        p.hitbox.y + p.hitbox.h / 2.0, 
+                        state.souris_x, 
+                        state.souris_y
+                    );
+                    p.projectiles.push(nouveau_proj);
+                }
+
             } else {
                 let mut new_p = Player::new(player_tex.clone());
                 new_p.id = state.id;
@@ -81,8 +106,34 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self,network: &mut NetworkManager, player_tex: Texture2D) {
         let camera = get_camera();
+
+        if is_mouse_button_pressed(MouseButton::Left) {
+            self.pending_shot = true;
+            let mouse_pos = mouse_position();
+            let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
+            self.pending_mouse_x = world_mouse.x;
+            self.pending_mouse_y = world_mouse.y;
+        }
+
+        let messages = network.receive_messages();
+        let mut client_states = Vec::new();
+
+        for msg in messages {
+            match msg {
+                GameMessage::ClientUpdate(state) => {
+                    if self.is_host { client_states.push(state); }
+                }
+                GameMessage::HostSync(json_str) => {
+                    if !self.is_host { self.apply_network_json(&json_str,player_tex.clone()); }
+                }
+            }
+        }
+
+        if self.is_host && !client_states.is_empty() {
+            self.sync_network(client_states,player_tex.clone());
+        }
 
         ////////PARDON FAUT METTRE HITBOXES MUR LA DCP /////////
         //--- DEFINITION DES HITBOXES ----
@@ -126,10 +177,29 @@ impl Game {
                 joueur.projectiles = std::mem::take(&mut projectiles_des_autres[i]);
             }
         }
-        self.player.update(&camera,&self.wallmap, &mut self.other_players);
+        self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
 
+        let time_now = macroquad::time::get_time();
+        let network_tick_rate = 1.0 / 120.0;
 
-        //TODO Gerer l'import et l'export des json avec les fonctions generate json et apply json
+        if time_now - self.last_network_send > network_tick_rate {
+            self.last_network_send = time_now;
+
+            if self.is_host {
+                let json_state = self.generate_host_json();
+                network.send_json(&json_state);
+                self.pending_shot = false; 
+            } else {
+                let mut my_state = self.get_local_player_state();
+                if self.pending_shot {
+                    my_state.a_tire = true;
+                    my_state.souris_x = self.pending_mouse_x;
+                    my_state.souris_y = self.pending_mouse_y;
+                    self.pending_shot = false;
+                }
+                network.send_state(&my_state);
+            }
+        }
 
     }
 
@@ -164,7 +234,7 @@ impl Game {
         let mut net_players = Vec::new();
 
         let my_net_projs: Vec<NetworkProjectile> = self.player.projectiles.iter().map(|p| {
-            NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y }
+            NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y, r: p.hitbox.r, is_exploding: p.is_exploding }
         }).collect();
 
         net_players.push(NetworkPlayer {
@@ -177,9 +247,9 @@ impl Game {
 
         for other in &self.other_players {
             let other_net_projs: Vec<NetworkProjectile> = other.projectiles.iter().map(|p| {
-                NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y }
+                NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y, r: p.hitbox.r, is_exploding: p.is_exploding }
             }).collect();
-
+            
             net_players.push(NetworkPlayer {
                 id: other.id,
                 x: other.hitbox.x,
@@ -193,7 +263,7 @@ impl Game {
         serde_json::to_string(&state).unwrap_or_else(|_| "{}".to_string())
     }
 
-    pub fn apply_network_json(&mut self, json_str: &str) {
+    pub fn apply_network_json(&mut self, json_str: &str, player_tex: Texture2D) {
         if let Ok(state) = serde_json::from_str::<NetworkGameState>(json_str) {
             for net_p in state.players {
                 if let Some(other) = self.other_players.iter_mut().find(|p| p.id == net_p.id) {
@@ -202,18 +272,55 @@ impl Game {
                     other.PV = net_p.pv;
                     
                     other.projectiles.clear();
-                    
                     for net_proj in net_p.projectiles {
                         let mut projectile_marionnette = Projectile::new(other.id, net_proj.x, net_proj.y, net_proj.x, net_proj.y);
                         projectile_marionnette.hitbox.x = net_proj.x;
                         projectile_marionnette.hitbox.y = net_proj.y;
+                        
+                        projectile_marionnette.hitbox.r = net_proj.r; 
+                        projectile_marionnette.is_exploding = net_proj.is_exploding; 
+                        
                         other.projectiles.push(projectile_marionnette);
                     }
                 } else if net_p.id == self.player.id {
                     self.player.PV = net_p.pv;
+                    self.player.projectiles.clear();
+                    
+                    for net_proj in net_p.projectiles {
+                        let mut projectile_marionnette = Projectile::new(self.player.id, net_proj.x, net_proj.y, net_proj.x, net_proj.y);
+                        projectile_marionnette.hitbox.x = net_proj.x;
+                        projectile_marionnette.hitbox.y = net_proj.y;
+
+                        projectile_marionnette.hitbox.r = net_proj.r; 
+                        projectile_marionnette.is_exploding = net_proj.is_exploding;
+                        
+                        self.player.projectiles.push(projectile_marionnette);
+                    }
+                }
+                else {
+                    // --- CHANGEMENT ICI : Le client crée l'Hôte s'il ne le connaît pas ---
+                    let mut new_p = Player::new(player_tex.clone());
+                    new_p.id = net_p.id;
+                    new_p.hitbox.x = net_p.x;
+                    new_p.hitbox.y = net_p.y;
+                    new_p.PV = net_p.pv;
+                    self.other_players.push(new_p);
                 }
             }
         }
     }
+
+    pub fn get_local_player_state(&self) -> PlayerState {
+        // --- CHANGEMENT ICI : Plus de vérification de clics, l'update s'en charge ---
+        PlayerState {
+            id: self.player.id,
+            x: self.player.hitbox.x,
+            y: self.player.hitbox.y,
+            a_tire: false, 
+            souris_x: 0.0,
+            souris_y: 0.0,
+        }
+    }
+
 
 }

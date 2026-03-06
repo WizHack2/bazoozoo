@@ -11,6 +11,7 @@ use game::Game;
 use assets::Assets;
 use boilerplate::network::NetworkManager;
 use boilerplate::network::PlayerState;
+use boilerplate::network::GameMessage;
 
 #[macroquad::main("My Game")]
 async fn main() {
@@ -21,7 +22,9 @@ async fn main() {
     let assets = Assets::load().await;
 
     // Init de la partie
-    let mut game = Game::new(&assets,true);
+    //TODO un menu pour choisir si on est host ou client et entrer l'url de la salle
+    let is_host = false; 
+    let mut game = Game::new(&assets, is_host);
 
     // Init connexion partie
     let mut network = NetworkManager::new("ws://127.0.0.1:3536/salle_privee").await;
@@ -29,17 +32,9 @@ async fn main() {
     loop {
         clear_background(BLACK);
 
-        let my_state = PlayerState { 
-            id: game.player.id, 
-            x: game.player.hitbox.x, 
-            y: game.player.hitbox.y 
-        };
+        // On passe le réseau et la texture du joueur à l'update !
+        game.update(&mut network, assets.player.clone());
         
-        network.send_state(&my_state);
-        let received_states = network.update_and_receive();
-        game.sync_network(received_states, assets.player.clone());
-
-        game.update();
         game.draw();
 
         next_frame().await;
