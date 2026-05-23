@@ -244,29 +244,16 @@ impl Game {
         
         // --- DESSIN DES MURS (PLATES-FORMES TEXTURÉES) ---
         for wall in &self.wallmap {
-            let mut current_x = wall.x;
-            let tile_size = wall.h; // Des tuiles carrées basées sur la hauteur de la plate-forme (ex: 4.0)
-            while current_x < wall.x + wall.w {
-                let draw_width = if current_x + tile_size > wall.x + wall.w {
-                    wall.x + wall.w - current_x
-                } else {
-                    tile_size
-                };
-                
-                let source_rect = Rect::new(0.0, 0.0, (draw_width / tile_size) * self.platform_tile.width(), self.platform_tile.height());
-                draw_texture_ex(
-                    &self.platform_tile,
-                    current_x,
-                    wall.y,
-                    WHITE,
-                    DrawTextureParams {
-                        source: Some(source_rect),
-                        dest_size: Some(vec2(draw_width, wall.h)),
-                        ..Default::default()
-                    }
-                );
-                current_x += tile_size;
-            }
+            draw_texture_ex(
+                &self.platform_tile,
+                wall.x,
+                wall.y,
+                WHITE,
+                DrawTextureParams {
+                    dest_size: Some(vec2(wall.w, wall.h)),
+                    ..Default::default()
+                }
+            );
         }
 
         // --- DESSIN DES COLLIDERS DE DEBUG ---
