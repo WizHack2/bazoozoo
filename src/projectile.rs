@@ -170,9 +170,9 @@ impl ExplosionParticleSystem {
         let floor_y = 100.0;
 
         for p in &mut self.particles {
-            // Push current position to trail history (keep up to 5 points)
+            // Push current position to trail history (keep up to 9 points)
             p.trail.push(p.position);
-            if p.trail.len() > 5 {
+            if p.trail.len() > 9 {
                 p.trail.remove(0);
             }
 
@@ -233,10 +233,10 @@ impl ExplosionParticleSystem {
             for (i, trail_pos) in p.trail.iter().enumerate() {
                 let trail_progress = (i + 1) as f32 / (trail_len + 1) as f32;
                 let mut trail_color = render_color;
-                // Deeper trail alpha fade (older points are fainter)
-                trail_color.a = render_color.a * 0.45 * trail_progress; 
-                // Smaller size for older trail elements
-                let trail_size = size * (0.35 + 0.65 * trail_progress);
+                // Increased trail visibility (alpha multiplier set to 0.7)
+                trail_color.a = render_color.a * 0.7 * trail_progress; 
+                // Slightly larger trail elements (0.45 min scale) for better presence
+                let trail_size = size * (0.45 + 0.55 * trail_progress);
 
                 draw_rectangle(
                     trail_pos.x - trail_size / 2.0,
