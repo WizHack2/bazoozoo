@@ -118,30 +118,36 @@ impl ExplosionParticleSystem {
         use macroquad::rand::gen_range;
         use std::f32::consts::PI;
 
-        let count = gen_range(16, 28);
+        // Density increased significantly (120 to 180 particles)
+        let count = gen_range(120, 180);
         for _ in 0..count {
             let angle = gen_range(0.0, 2.0 * PI);
-            let speed = gen_range(40.0, 90.0);
+            // Lower average speeds combined with high-velocity outliers for a gorgeous dispersion
+            let speed = if gen_range(0.0, 1.0) < 0.75 {
+                gen_range(15.0, 45.0)
+            } else {
+                gen_range(45.0, 75.0)
+            };
             let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
 
-            // Retro color palette selector (60% fire, 40% ash/smoke)
-            let color = if gen_range(0.0, 1.0) < 0.6 {
-                // Fire colors: Red to Yellow transition
-                match gen_range(0, 3) {
-                    0 => RED,
-                    1 => ORANGE,
-                    _ => YELLOW,
+            // Vibrant, high-end retro pixel color palette (70% warm ember colors, 30% soft ashes)
+            let color = if gen_range(0.0, 1.0) < 0.7 {
+                match gen_range(0, 4) {
+                    0 => Color::new(1.0, gen_range(0.0, 0.2), 0.0, 1.0),       // Incandescent Red
+                    1 => Color::new(1.0, gen_range(0.3, 0.6), 0.0, 1.0),       // Hot Orange
+                    2 => Color::new(1.0, gen_range(0.7, 0.95), gen_range(0.0, 0.3), 1.0), // Bright Yellow
+                    _ => Color::new(1.0, 0.95, 0.6, 1.0),                      // White-hot core
                 }
             } else {
-                // Smoke/debris colors: Slate gray to light ash
-                match gen_range(0, 2) {
-                    0 => Color::new(0.3, 0.3, 0.3, 1.0),
-                    _ => Color::new(0.6, 0.6, 0.6, 1.0),
-                }
+                // Smoke/debris colors: slate gray to light translucent ash
+                let gray = gen_range(0.3, 0.7);
+                Color::new(gray, gray, gray, gen_range(0.5, 0.8))
             };
 
-            let initial_size = gen_range(1.0, 2.5);
-            let lifetime = gen_range(0.3, 0.7);
+            // Much smaller, pixelated particles (0.3 to 0.8)
+            let initial_size = gen_range(0.3, 0.8);
+            // Longer lifetime to let particles fall all the way to platforms or the floor (Y=100)
+            let lifetime = gen_range(1.2, 2.8);
 
             self.particles.push(ExplosionParticle {
                 position: pos,
@@ -155,9 +161,10 @@ impl ExplosionParticleSystem {
     }
 
     pub fn update(&mut self, dt: f32, wallmap: &[Rect]) {
-        let gravity = 80.0;
-        let friction = 1.5;
-        let elasticity = 0.4;
+        // Optimized gravity/friction values for smooth parabolic rain and floor/platform bouncing
+        let gravity = 65.0;     // Balanced gravity for realistic acceleration
+        let friction = 0.5;    // Low air friction keeps horizontal velocity intact for wider arcs
+        let elasticity = 0.35;  // Bounces slightly ("un tout petit peu") as requested by the user
         let floor_y = 100.0;
 
         for p in &mut self.particles {
