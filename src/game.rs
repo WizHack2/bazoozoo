@@ -40,10 +40,13 @@ pub fn get_camera() -> Camera2D {
 
 pub struct Game {
     pub background: Texture2D,
+    pub hollow_background: Texture2D,
+    pub is_hollow_map: bool,
+    pub debug_show_hitboxes: bool,
     pub player: Player,
     pub wallmap: Vec<Rect>,
     pub other_players: Vec<Player>,
-    pub is_host :bool,
+    pub is_host: bool,
     //TEST TICK RATE
     pub last_network_send: f64,
     pub pending_shot: bool,
@@ -52,14 +55,17 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(assets: &Assets,is_host1:bool) -> Self {
+    pub fn new(assets: &Assets, is_host1: bool) -> Self {
         set_fullscreen(true);
         Self {
             background: assets.background.clone(),
+            hollow_background: assets.hollow_background.clone(),
+            is_hollow_map: true,
+            debug_show_hitboxes: false,
             player: Player::new(assets.player.clone()),
-            wallmap: charger_hitboxes("assets/map2.json".to_string()),
+            wallmap: charger_hitboxes("assets/hollow_map.json".to_string()),
             other_players: Vec::new(),
-            is_host : is_host1,
+            is_host: is_host1,
 
             last_network_send: macroquad::time::get_time(),
             pending_shot: false,
@@ -96,7 +102,20 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self,network: &mut NetworkManager, player_tex: Texture2D) {
+    pub fn update(&mut self, network: &mut NetworkManager, player_tex: Texture2D) {
+        if is_key_pressed(KeyCode::F3) {
+            self.debug_show_hitboxes = !self.debug_show_hitboxes;
+        }
+
+        if is_key_pressed(KeyCode::M) {
+            self.is_hollow_map = !self.is_hollow_map;
+            if self.is_hollow_map {
+                self.wallmap = charger_hitboxes("assets/hollow_map.json".to_string());
+            } else {
+                self.wallmap = charger_hitboxes("assets/map2.json".to_string());
+            }
+        }
+
         let camera = get_camera();
 
         if is_mouse_button_pressed(MouseButton::Left) {
@@ -218,17 +237,33 @@ impl Game {
         clear_background(BLACK);
 
         // --- DESSIN DU BACKGROUND ---
-        draw_texture_ex(&self.background, 0., 0., WHITE,DrawTextureParams {dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)),..Default::default()});
+        let bg_tex = if self.is_hollow_map { &self.hollow_background } else { &self.background };
+        draw_texture_ex(bg_tex, 0., 0., WHITE, DrawTextureParams { dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)), ..Default::default() });
+        
         // --- DESSIN DES MURS ---
-        for wall in &self.wallmap { draw_rectangle(wall.x,wall.y, wall.w,wall.h, GRAY); }
+        if self.debug_show_hitboxes {
+            for wall in &self.wallmap {
+                draw_rectangle(wall.x, wall.y, wall.w, wall.h, Color::new(0.7, 0.7, 0.7, 0.4));
+            }
+        }
         // --- DESSIN DES JOUEURS ---
         self.player.draw();
-        for player in &self.other_players{
+        for player in &self.other_players {
             player.draw()
         }
 
         // --- DESSIN DE L'UI (Sans la caméra) ---
         set_default_camera();
+
+        // Draw HUD help text
+        let font_size = 20.0;
+        let text_color = LIGHTGRAY;
+        draw_text("Pressez [M] pour changer de carte | [F3] pour afficher/masquer les hitboxes de debug", 10.0, 30.0, font_size, text_color);
+        if self.is_hollow_map {
+            draw_text("Carte active : Hollow Knight (Pixel Art)", 10.0, 55.0, font_size, SKYBLUE);
+        } else {
+            draw_text("Carte active : Origine", 10.0, 55.0, font_size, ORANGE);
+        }
     }
 
     pub fn generate_host_json(&self) -> String {
