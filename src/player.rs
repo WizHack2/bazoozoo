@@ -51,7 +51,14 @@ impl ParticleSystem {
             let mut color = p.color;
             color.a = progress * p.color.a;
             let current_size = p.size * progress;
-            draw_circle(p.position.x, p.position.y, current_size, color);
+            // Dessine de vrais pixels carrés rétro !
+            draw_rectangle(
+                p.position.x - current_size / 2.0,
+                p.position.y - current_size / 2.0,
+                current_size,
+                current_size,
+                color,
+            );
         }
     }
 }
@@ -194,9 +201,14 @@ impl Player {
         }
 
         for wall in wallmap {
-            if self.hitbox.overlaps(wall) {
-                if dy > 0.0 {
-                    // On tombe. On se pose PILE sur le mur.
+            // Détecte si le joueur est déjà posé à plat sur le haut de ce mur (évite le jitter d'overlaps)
+            let is_on_top = self.hitbox.x + self.hitbox.w > wall.x
+                && self.hitbox.x < wall.x + wall.w
+                && (self.hitbox.y + self.hitbox.h - wall.y).abs() < 0.1;
+
+            if self.hitbox.overlaps(wall) || is_on_top {
+                if dy > 0.0 || is_on_top {
+                    // On tombe ou on est déjà posé. On se pose PILE sur le mur.
                     self.hitbox.y = wall.y - self.hitbox.h;
                     self.physics.set_velocity_y(0.0);
                     self.jump_available = 2; // BINGO ! On récupère nos sauts ici !
@@ -245,23 +257,28 @@ impl Player {
         let feet_x = self.hitbox.x + self.hitbox.w / 2.0;
         let feet_y = self.hitbox.y + self.hitbox.h;
 
-        // Position slightly randomized around feet
+        // Position légèrement aléatoire sous les pieds
         let spawn_pos = vec2(
             feet_x + gen_range(-1.5, 1.5),
             feet_y - gen_range(0.0, 0.8),
         );
 
-        // Blow opposite to horizontal moving direction
+        // Propulsion dans le sens inverse de la course
         let vx = if moving_right {
             gen_range(-18.0, -8.0)
         } else {
             gen_range(8.0, 18.0)
         };
-        // Float upwards
         let vy = gen_range(-8.0, -2.0);
 
-        let color = Color::new(0.83, 0.80, 0.77, 0.55); // Warm grey dust
-        let size = gen_range(1.0, 2.2);
+        // Mélange de pixels de fumée grise et de poussière de mousse verte
+        let color = if macroquad::rand::gen_range(0, 3) == 0 {
+            Color::new(0.38, 0.53, 0.35, 0.65) // Vert mousse
+        } else {
+            Color::new(0.85, 0.85, 0.85, 0.60) // Gris fumée
+        };
+        
+        let size = gen_range(0.8, 1.8);
         let lifetime = gen_range(0.25, 0.45);
 
         self.particles.spawn(spawn_pos, vec2(vx, vy), color, size, lifetime);
@@ -275,23 +292,27 @@ impl Player {
         let right_edge = self.hitbox.x + self.hitbox.w;
         let center_x = self.hitbox.x + self.hitbox.w / 2.0;
 
-        let particle_count = gen_range(7, 11);
+        let particle_count = gen_range(8, 14);
         for _ in 0..particle_count {
             let spawn_x = gen_range(left_edge, right_edge);
             let spawn_pos = vec2(spawn_x, feet_y);
 
-            // Compute direction away from player center
             let is_left = spawn_x < center_x;
             let vx = if is_left {
                 gen_range(-28.0, -12.0)
             } else {
                 gen_range(12.0, 28.0)
             };
-            // Strong upward bounce velocity
             let vy = gen_range(-24.0, -6.0);
 
-            let color = Color::new(0.79, 0.76, 0.73, 0.70); // Slightly darker/thicker dust for impact
-            let size = gen_range(1.3, 2.8);
+            // Mélange de pixels gris, d'ardoise et de mousse verte sur l'impact
+            let color = match macroquad::rand::gen_range(0, 3) {
+                0 => Color::new(0.38, 0.53, 0.35, 0.75), // Vert mousse
+                1 => Color::new(0.50, 0.55, 0.60, 0.70), // Ardoise foncée
+                _ => Color::new(0.90, 0.90, 0.90, 0.80), // Blanc de fumée
+            };
+            
+            let size = gen_range(1.0, 2.3);
             let lifetime = gen_range(0.35, 0.55);
 
             self.particles.spawn(spawn_pos, vec2(vx, vy), color, size, lifetime);
