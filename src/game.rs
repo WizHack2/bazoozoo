@@ -41,6 +41,7 @@ pub fn get_camera() -> Camera2D {
 pub struct Game {
     pub background: Texture2D,
     pub hollow_background: Texture2D,
+    pub platform_tile: Texture2D,
     pub is_hollow_map: bool,
     pub debug_show_hitboxes: bool,
     pub player: Player,
@@ -60,6 +61,7 @@ impl Game {
         Self {
             background: assets.background.clone(),
             hollow_background: assets.hollow_background.clone(),
+            platform_tile: assets.platform_tile.clone(),
             is_hollow_map: true,
             debug_show_hitboxes: false,
             player: Player::new(assets.player.clone()),
@@ -240,10 +242,37 @@ impl Game {
         let bg_tex = if self.is_hollow_map { &self.hollow_background } else { &self.background };
         draw_texture_ex(bg_tex, 0., 0., WHITE, DrawTextureParams { dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)), ..Default::default() });
         
-        // --- DESSIN DES MURS ---
+        // --- DESSIN DES MURS (PLATES-FORMES TEXTURÉES) ---
+        for wall in &self.wallmap {
+            let mut current_x = wall.x;
+            let tile_size = wall.h; // Des tuiles carrées basées sur la hauteur de la plate-forme (ex: 4.0)
+            while current_x < wall.x + wall.w {
+                let draw_width = if current_x + tile_size > wall.x + wall.w {
+                    wall.x + wall.w - current_x
+                } else {
+                    tile_size
+                };
+                
+                let source_rect = Rect::new(0.0, 0.0, (draw_width / tile_size) * self.platform_tile.width(), self.platform_tile.height());
+                draw_texture_ex(
+                    &self.platform_tile,
+                    current_x,
+                    wall.y,
+                    WHITE,
+                    DrawTextureParams {
+                        source: Some(source_rect),
+                        dest_size: Some(vec2(draw_width, wall.h)),
+                        ..Default::default()
+                    }
+                );
+                current_x += tile_size;
+            }
+        }
+
+        // --- DESSIN DES COLLIDERS DE DEBUG ---
         if self.debug_show_hitboxes {
             for wall in &self.wallmap {
-                draw_rectangle(wall.x, wall.y, wall.w, wall.h, Color::new(0.7, 0.7, 0.7, 0.4));
+                draw_rectangle(wall.x, wall.y, wall.w, wall.h, Color::new(0.0, 1.0, 0.0, 0.35)); // Vert translucide pour un debug propre !
             }
         }
         // --- DESSIN DES JOUEURS ---
