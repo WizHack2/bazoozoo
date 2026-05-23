@@ -24,6 +24,8 @@ pub struct NetworkPlayer {
     pub x: f32,
     pub y: f32,
     pub pv: f32,
+    pub aim_x: f32,
+    pub aim_y: f32,
     pub projectiles: Vec<NetworkProjectile>,
 }
 
@@ -84,6 +86,14 @@ impl Game {
                 p.hitbox.x = state.x;
                 p.hitbox.y = state.y;
                 
+                // Update aiming direction from souris coordinates
+                let center_x = p.hitbox.x + p.hitbox.w / 2.0;
+                let center_y = p.hitbox.y + p.hitbox.h / 2.0;
+                let to_target = vec2(state.souris_x - center_x, state.souris_y - center_y);
+                if to_target.length() > 0.01 {
+                    p.bazooka_dir = to_target.normalize();
+                }
+                
                 // --- NOUVEAU : L'HÔTE CRÉE LE TIR DU CLIENT ---
                 if state.a_tire {
                     let nouveau_proj = Projectile::new(
@@ -122,7 +132,7 @@ impl Game {
 
         let camera = get_camera();
 
-        if is_mouse_button_pressed(MouseButton::Left) {
+        if is_mouse_button_pressed(MouseButton::Left) && !self.player.is_reloading {
             self.pending_shot = true;
             let mouse_pos = mouse_position();
             let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
@@ -224,7 +234,7 @@ impl Game {
                 network.send_json(&json_state);
                 self.pending_shot = false; 
             } else {
-                let mut my_state = self.get_local_player_state();
+                let mut my_state = self.get_local_player_state(&camera);
                 if self.pending_shot {
                     my_state.a_tire = true;
                     my_state.souris_x = self.pending_mouse_x;
@@ -379,6 +389,8 @@ impl Game {
             x: self.player.hitbox.x,
             y: self.player.hitbox.y,
             pv: self.player.pv,
+            aim_x: self.player.bazooka_dir.x,
+            aim_y: self.player.bazooka_dir.y,
             projectiles: my_net_projs,
         });
 
@@ -392,6 +404,8 @@ impl Game {
                 x: other.hitbox.x,
                 y: other.hitbox.y,
                 pv: other.pv,
+                aim_x: other.bazooka_dir.x,
+                aim_y: other.bazooka_dir.y,
                 projectiles: other_net_projs,
             });
         }
@@ -407,6 +421,7 @@ impl Game {
                     other.hitbox.x = net_p.x;
                     other.hitbox.y = net_p.y;
                     other.pv = net_p.pv;
+                    other.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
                     
                     let old_projectiles = std::mem::take(&mut other.projectiles);
                     for net_proj in net_p.projectiles {
@@ -463,21 +478,24 @@ impl Game {
                     new_p.hitbox.x = net_p.x;
                     new_p.hitbox.y = net_p.y;
                     new_p.pv = net_p.pv;
+                    new_p.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
                     self.other_players.push(new_p);
                 }
             }
         }
     }
 
-    pub fn get_local_player_state(&self) -> PlayerState {
-        // --- CHANGEMENT ICI : Plus de vérification de clics, l'update s'en charge ---
+    pub fn get_local_player_state(&self, _camera: &Camera2D) -> PlayerState {
+        let center_x = self.player.hitbox.x + self.player.hitbox.w / 2.0;
+        let center_y = self.player.hitbox.y + self.player.hitbox.h / 2.0;
+        let aim_target = vec2(center_x, center_y) + self.player.bazooka_dir * 100.0;
         PlayerState {
             id: self.player.id,
             x: self.player.hitbox.x,
             y: self.player.hitbox.y,
             a_tire: false, 
-            souris_x: 0.0,
-            souris_y: 0.0,
+            souris_x: aim_target.x,
+            souris_y: aim_target.y,
         }
     }
 

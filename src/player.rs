@@ -63,6 +63,41 @@ impl ParticleSystem {
     }
 }
 
+fn create_bazooka_texture() -> Texture2D {
+    // A 12x6 pixel art bazooka
+    let mut image = Image::gen_image_color(12, 6, Color::new(0.0, 0.0, 0.0, 0.0));
+    
+    // Body (dark steel gray)
+    for x in 2..10 {
+        for y in 2..5 {
+            image.set_pixel(x, y, Color::new(0.3, 0.3, 0.35, 1.0));
+        }
+    }
+    // Muzzle (metallic silver/light grey)
+    for y in 1..6 {
+        image.set_pixel(10, y, Color::new(0.6, 0.6, 0.65, 1.0));
+        image.set_pixel(11, y, Color::new(0.7, 0.7, 0.75, 1.0));
+    }
+    // Back exhaust (darker grey)
+    for y in 2..5 {
+        image.set_pixel(0, y, Color::new(0.15, 0.15, 0.18, 1.0));
+        image.set_pixel(1, y, Color::new(0.2, 0.2, 0.23, 1.0));
+    }
+    // Scope (top)
+    image.set_pixel(5, 1, Color::new(0.1, 0.1, 0.1, 1.0));
+    image.set_pixel(6, 1, Color::new(0.1, 0.1, 0.1, 1.0));
+    image.set_pixel(7, 1, Color::new(0.1, 0.1, 0.1, 1.0));
+    image.set_pixel(6, 0, Color::new(0.0, 0.8, 1.0, 1.0)); // Lens (cyan)
+    
+    // Handle (bottom)
+    image.set_pixel(4, 5, Color::new(0.1, 0.1, 0.1, 1.0));
+    image.set_pixel(8, 5, Color::new(0.1, 0.1, 0.1, 1.0));
+
+    let tex = Texture2D::from_image(&image);
+    tex.set_filter(FilterMode::Nearest);
+    tex
+}
+
 pub struct Player {
     pub id: i32,
     animation: Animation,
@@ -82,6 +117,16 @@ pub struct Player {
     // --- TIR CLAVIER + RECUL ---
     /// Cooldown en secondes avant de pouvoir retirer une rocket (clavier)
     pub rocket_cooldown: f32,
+
+    // --- BAZOOKA & RELOAD ---
+    pub bazooka_texture: Texture2D,
+    pub bazooka_dir: Vec2,
+    pub keyboard_dir_timer: f32,
+    pub recoil_displacement: f32,
+    pub max_ammo: i32,
+    pub current_ammo: i32,
+    pub is_reloading: bool,
+    pub reload_timer: f32,
 }
 
 impl Player {
@@ -102,6 +147,15 @@ impl Player {
             dust_timer: 0.0,
 
             rocket_cooldown: 0.0,
+
+            bazooka_texture: create_bazooka_texture(),
+            bazooka_dir: vec2(1.0, 0.0),
+            keyboard_dir_timer: 0.0,
+            recoil_displacement: 0.0,
+            max_ammo: 3,
+            current_ammo: 3,
+            is_reloading: false,
+            reload_timer: 0.0,
         }
     }
 
@@ -197,27 +251,50 @@ impl Player {
                 }
         }
 
+        // --- RELOAD MANUEL ---
+        if is_key_pressed(KeyCode::E) && !self.is_reloading && self.current_ammo < self.max_ammo {
+            self.is_reloading = true;
+            self.reload_timer = 2.0;
+        }
+
         // --- TIR CLAVIER : T/G/F/H/R/Y/V/N = une touche par direction (AZERTY) ---
         if self.rocket_cooldown > 0.0 {
             self.rocket_cooldown -= dt;
         }
-        if self.rocket_cooldown <= 0.0 {
+        if self.rocket_cooldown <= 0.0 && !self.is_reloading {
+            let mut shot_dir = None;
             if is_key_pressed(KeyCode::T) {
-                self.tirer_projectile_clavier(vec2(0.0, -1.0)); // Haut
+                shot_dir = Some(vec2(0.0, -1.0)); // Haut
             } else if is_key_pressed(KeyCode::G) {
-                self.tirer_projectile_clavier(vec2(0.0, 1.0));  // Bas
+                shot_dir = Some(vec2(0.0, 1.0));  // Bas
             } else if is_key_pressed(KeyCode::F) {
-                self.tirer_projectile_clavier(vec2(-1.0, 0.0)); // Gauche
+                shot_dir = Some(vec2(-1.0, 0.0)); // Gauche
             } else if is_key_pressed(KeyCode::H) {
-                self.tirer_projectile_clavier(vec2(1.0, 0.0));  // Droite
+                shot_dir = Some(vec2(1.0, 0.0));  // Droite
             } else if is_key_pressed(KeyCode::R) {
-                self.tirer_projectile_clavier(vec2(-1.0, -1.0).normalize()); // Haut-Gauche
+                shot_dir = Some(vec2(-1.0, -1.0).normalize()); // Haut-Gauche
             } else if is_key_pressed(KeyCode::Y) {
-                self.tirer_projectile_clavier(vec2(1.0, -1.0).normalize());  // Haut-Droite
+                shot_dir = Some(vec2(1.0, -1.0).normalize());  // Haut-Droite
             } else if is_key_pressed(KeyCode::V) {
-                self.tirer_projectile_clavier(vec2(-1.0, 1.0).normalize());  // Bas-Gauche
+                shot_dir = Some(vec2(-1.0, 1.0).normalize());  // Bas-Gauche
             } else if is_key_pressed(KeyCode::N) {
-                self.tirer_projectile_clavier(vec2(1.0, 1.0).normalize());   // Bas-Droite
+                shot_dir = Some(vec2(1.0, 1.0).normalize());   // Bas-Droite
+            }
+
+            if let Some(dir) = shot_dir {
+                self.tirer_projectile_clavier(dir);
+                self.current_ammo -= 1;
+                self.bazooka_dir = dir;
+                self.keyboard_dir_timer = 0.5;
+                self.recoil_displacement = 2.0;
+
+                // Muzzle flash particle animation!
+                self.spawn_muzzle_flash(dir);
+
+                if self.current_ammo == 0 {
+                    self.is_reloading = true;
+                    self.reload_timer = 2.0;
+                }
             }
         }
 
@@ -241,6 +318,54 @@ impl Player {
 
         let dt = get_frame_time().clamp(0.001, 0.05);
 
+        // --- TIMERS ET DEPLACEMENTS BAZOOKA ---
+        if self.keyboard_dir_timer > 0.0 {
+            self.keyboard_dir_timer -= dt;
+        }
+
+        if self.recoil_displacement > 0.0 {
+            self.recoil_displacement -= dt * 15.0;
+            if self.recoil_displacement < 0.0 {
+                self.recoil_displacement = 0.0;
+            }
+        }
+
+        // --- VISÉE BAZOOKA SOURIS ---
+        if self.keyboard_dir_timer <= 0.0 {
+            let mouse_pos = mouse_position();
+            let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
+            let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+            let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+            let to_mouse = vec2(world_mouse.x - center_x, world_mouse.y - center_y);
+            let len = to_mouse.length();
+            if len > 0.01 {
+                self.bazooka_dir = to_mouse / len;
+            }
+        }
+
+        // --- GESTION DU RECHARGEMENT ---
+        if self.is_reloading {
+            self.reload_timer -= dt;
+            if self.reload_timer <= 0.0 {
+                self.is_reloading = false;
+                self.current_ammo = self.max_ammo;
+            }
+
+            // Particules de rechargement qui s'élèvent
+            if macroquad::rand::gen_range(0, 3) == 0 {
+                use macroquad::rand::gen_range;
+                let spawn_pos = vec2(
+                    self.hitbox.x + gen_range(0.0, self.hitbox.w),
+                    self.hitbox.y + self.hitbox.h,
+                );
+                let velocity = vec2(gen_range(-2.0, 2.0), gen_range(-15.0, -8.0));
+                let color = Color::new(0.0, 0.9, 1.0, 0.7); // Cyan translucide
+                let size = gen_range(0.8, 1.4);
+                let lifetime = gen_range(0.4, 0.8);
+                self.particles.spawn(spawn_pos, velocity, color, size, lifetime);
+            }
+        }
+
         // 1. Capture preceding grounded state
         self.was_grounded = self.is_grounded;
 
@@ -253,7 +378,7 @@ impl Player {
         let dy = self.hitbox.y - old_y; // Velocity direction detection
 
         // --- LOGIQUE DE TIR ---
-        if is_mouse_button_pressed(MouseButton::Left) {
+        if is_mouse_button_pressed(MouseButton::Left) && !self.is_reloading {
             let mouse_pos = mouse_position();
             let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
             let center_x = self.hitbox.x + self.hitbox.w / 2.0;
@@ -262,9 +387,21 @@ impl Player {
             let length = dir.length();
             if length > 0.0 {
                 let dir = dir / length;
+
+                // Muzzle flash particle animation!
+                self.spawn_muzzle_flash(dir);
+
                 const RECOIL_FORCE: f32 = 80.0;
                 let recoil = -dir * RECOIL_FORCE;
                 self.apply_recoil(recoil);
+
+                self.current_ammo -= 1;
+                self.recoil_displacement = 2.0;
+
+                if self.current_ammo == 0 {
+                    self.is_reloading = true;
+                    self.reload_timer = 2.0;
+                }
             }
 
             if is_host {
@@ -401,6 +538,62 @@ impl Player {
         }
     }
 
+    fn spawn_muzzle_flash(&mut self, dir: Vec2) {
+        use macroquad::rand::gen_range;
+        let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+        let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+        let muzzle_pos = vec2(center_x, center_y) + dir * 4.5;
+
+        let count = gen_range(6, 12);
+        for _ in 0..count {
+            let angle: f32 = gen_range(-0.4, 0.4);
+            let rotated_dir = vec2(
+                dir.x * angle.cos() - dir.y * angle.sin(),
+                dir.x * angle.sin() + dir.y * angle.cos(),
+            );
+            let speed = gen_range(15.0, 35.0);
+            let velocity = rotated_dir * speed;
+            let color = if macroquad::rand::gen_range(0, 2) == 0 {
+                Color::new(1.0, gen_range(0.4, 0.7), 0.0, 1.0)
+            } else {
+                Color::new(1.0, 0.9, 0.4, 1.0)
+            };
+            let size = gen_range(0.6, 1.4);
+            let lifetime = gen_range(0.1, 0.25);
+            self.particles.spawn(muzzle_pos, velocity, color, size, lifetime);
+        }
+    }
+
+    pub fn draw_ammobar(&self) {
+        if self.is_reloading {
+            let bar_w: f32 = 6.0;
+            let bar_h: f32 = 0.4;
+            let x = self.hitbox.x + self.hitbox.w / 2.0 - bar_w / 2.0;
+            let y = self.hitbox.y - 1.2;
+
+            draw_rectangle(x, y, bar_w, bar_h, Color::new(0.2, 0.2, 0.2, 0.7));
+
+            let progress = ((2.0 - self.reload_timer) / 2.0).clamp(0.0, 1.0);
+            draw_rectangle(x, y, bar_w * progress, bar_h, Color::new(0.0, 0.9, 1.0, 1.0));
+        } else {
+            let ammo_w: f32 = 1.0;
+            let ammo_h: f32 = 0.4;
+            let gap: f32 = 0.3;
+            let total_w = (ammo_w * self.max_ammo as f32) + (gap * (self.max_ammo - 1) as f32);
+            let start_x = self.hitbox.x + self.hitbox.w / 2.0 - total_w / 2.0;
+            let y = self.hitbox.y - 1.2;
+
+            for i in 0..self.max_ammo {
+                let color = if i < self.current_ammo {
+                    YELLOW
+                } else {
+                    Color::new(0.3, 0.3, 0.3, 0.5)
+                };
+                draw_rectangle(start_x + i as f32 * (ammo_w + gap), y, ammo_w, ammo_h, color);
+            }
+        }
+    }
+
     pub fn draw_healthbar(&self) {
         let width: f32 = 6.;
 
@@ -410,8 +603,33 @@ impl Player {
 
     pub fn draw(&self) {
         self.particles.draw();
-        self.animation.draw_current_frame(self.hitbox.x, self.hitbox.y, 10., 10., true);
+        
+        let look_right = self.bazooka_dir.x >= 0.0;
+        self.animation.draw_current_frame(self.hitbox.x, self.hitbox.y, 10., 10., look_right);
+        
         self.draw_healthbar();
+        self.draw_ammobar();
+
+        // Draw rotated Bazooka
+        let angle = self.bazooka_dir.y.atan2(self.bazooka_dir.x);
+        let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+        let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+        
+        // recoil visual displacement
+        let bazooka_pos = vec2(center_x, center_y) - self.bazooka_dir * self.recoil_displacement;
+        
+        draw_texture_ex(
+            &self.bazooka_texture,
+            bazooka_pos.x - 1.5,
+            bazooka_pos.y - 1.5,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(6.0, 3.0)),
+                pivot: Some(vec2(bazooka_pos.x, bazooka_pos.y)),
+                rotation: angle,
+                ..Default::default()
+            }
+        );
 
         for projectile in &self.projectiles {
             projectile.draw();
