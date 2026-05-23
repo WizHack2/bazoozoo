@@ -211,7 +211,7 @@ impl Game {
             }
         }
         self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
-        self.explosion_particles.update(dt);
+        self.explosion_particles.update(dt, &self.wallmap);
 
         let time_now = macroquad::time::get_time();
         let network_tick_rate = 1.0 / 120.0;

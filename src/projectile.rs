@@ -154,17 +154,50 @@ impl ExplosionParticleSystem {
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f32, wallmap: &[Rect]) {
         let gravity = 80.0;
         let friction = 1.5;
+        let elasticity = 0.4;
+        let floor_y = 100.0;
 
         for p in &mut self.particles {
             // Apply gravity
             p.velocity.y += gravity * dt;
             // Apply air resistance/friction
             p.velocity *= 1.0 - (friction * dt);
-            // Move particle
-            p.position += p.velocity * dt;
+
+            // Compute next tentative position
+            let next_pos = p.position + p.velocity * dt;
+            let mut bounced = false;
+
+            // 1. Collision with the screen bottom floor (Y = 100.0)
+            if p.velocity.y > 0.0 && next_pos.y >= floor_y {
+                p.position.y = floor_y;
+                p.position.x = next_pos.x;
+                p.velocity.y = -elasticity * p.velocity.y;
+                bounced = true;
+            }
+
+            // 2. Collision with top surfaces of wallmap platforms
+            if !bounced && p.velocity.y > 0.0 {
+                for wall in wallmap {
+                    if next_pos.x >= wall.x && next_pos.x <= wall.x + wall.w {
+                        if p.position.y <= wall.y && next_pos.y >= wall.y {
+                            p.position.y = wall.y;
+                            p.position.x = next_pos.x;
+                            p.velocity.y = -elasticity * p.velocity.y;
+                            bounced = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If no bounce occurred, perform normal movement
+            if !bounced {
+                p.position = next_pos;
+            }
+
             // Age particle
             p.lifetime -= dt;
         }
