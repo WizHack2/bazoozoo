@@ -242,11 +242,14 @@ impl Game {
         let bg_tex = if self.is_hollow_map { &self.hollow_background } else { &self.background };
         draw_texture_ex(bg_tex, 0., 0., WHITE, DrawTextureParams { dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)), ..Default::default() });
         
-        // --- DESSIN DES MURS (PLATES-FORMES TEXTURÉES AVEC 3-SLICING) ---
+        // --- DESSIN DES MURS (PLATES-FORMES TEXTURÉES AVEC 3-SLICING ET TILING PARFAIT) ---
         for wall in &self.wallmap {
-            let cap_size = wall.h; // Largeur des embouts égale à la hauteur physique (4.0)
+            let cap_size = wall.h; // Embout carré (4.0 x 4.0)
+            let tex_w = self.platform_tile.width();
+            let tex_h = self.platform_tile.height();
+            
             if wall.w <= cap_size * 2.0 {
-                // Si la plate-forme est trop petite, on étire simplement la texture entière
+                // Si la plateforme est trop petite, on dessine le bloc entier
                 draw_texture_ex(
                     &self.platform_tile,
                     wall.x,
@@ -258,11 +261,8 @@ impl Game {
                     }
                 );
             } else {
-                let tex_w = self.platform_tile.width();
-                let tex_h = self.platform_tile.height();
-                
-                // 1. Embout Gauche (15% gauche de la texture)
-                let left_src = Rect::new(0.0, 0.0, tex_w * 0.15, tex_h);
+                // 1. Embout Gauche (25% en haut à gauche de la texture, aspect 1:1)
+                let left_src = Rect::new(0.0, 0.0, tex_w * 0.25, tex_h * 0.25);
                 draw_texture_ex(
                     &self.platform_tile,
                     wall.x,
@@ -275,8 +275,8 @@ impl Game {
                     }
                 );
 
-                // 2. Embout Droit (15% droit de la texture)
-                let right_src = Rect::new(tex_w * 0.85, 0.0, tex_w * 0.15, tex_h);
+                // 2. Embout Droit (25% en haut à droite de la texture, aspect 1:1)
+                let right_src = Rect::new(tex_w * 0.75, 0.0, tex_w * 0.25, tex_h * 0.25);
                 draw_texture_ex(
                     &self.platform_tile,
                     wall.x + wall.w - cap_size,
@@ -289,19 +289,40 @@ impl Game {
                     }
                 );
 
-                // 3. Corps du Milieu (70% central de la texture, étiré sans distorsion des bords)
-                let middle_src = Rect::new(tex_w * 0.15, 0.0, tex_w * 0.70, tex_h);
-                draw_texture_ex(
-                    &self.platform_tile,
-                    wall.x + cap_size,
-                    wall.y,
-                    WHITE,
-                    DrawTextureParams {
-                        source: Some(middle_src),
-                        dest_size: Some(vec2(wall.w - cap_size * 2.0, wall.h)),
-                        ..Default::default()
-                    }
-                );
+                // 3. Remplissage du Milieu (Tiling de la section 25%-75% de la texture, aspect 2:1)
+                let mut current_x = wall.x + cap_size;
+                let end_x = wall.x + wall.w - cap_size;
+                let tile_width = wall.h * 2.0; // Aspect ratio 2:1 pour la tuile du milieu (8.0 x 4.0)
+                
+                while current_x < end_x {
+                    let draw_width = if current_x + tile_width > end_x {
+                        end_x - current_x
+                    } else {
+                        tile_width
+                    };
+                    
+                    let ratio = draw_width / tile_width;
+                    let middle_src = Rect::new(
+                        tex_w * 0.25,
+                        0.0,
+                        tex_w * 0.50 * ratio,
+                        tex_h * 0.25
+                    );
+                    
+                    draw_texture_ex(
+                        &self.platform_tile,
+                        current_x,
+                        wall.y,
+                        WHITE,
+                        DrawTextureParams {
+                            source: Some(middle_src),
+                            dest_size: Some(vec2(draw_width, wall.h)),
+                            ..Default::default()
+                        }
+                    );
+                    
+                    current_x += tile_width;
+                }
             }
         }
 
