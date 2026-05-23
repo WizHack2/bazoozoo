@@ -103,6 +103,7 @@ pub struct ExplosionParticle {
     pub lifetime: f32,
     pub max_lifetime: f32,
     pub trail: Vec<Vec2>, // Motion history to render trailing sparks
+    pub is_smoke: bool,   // Distinguishes sparks from expanding, floating smoke
 }
 
 pub struct ExplosionParticleSystem {
@@ -114,16 +115,15 @@ impl ExplosionParticleSystem {
         Self { particles: Vec::new() }
     }
 
-    /// Spawns a radial burst of active particles at the given location
+    /// Spawns a radial burst of active sparks and floating smoke puffs
     pub fn spawn_burst(&mut self, pos: Vec2) {
         use macroquad::rand::gen_range;
         use std::f32::consts::PI;
 
-        // Density increased significantly (120 to 180 particles)
-        let count = gen_range(120, 180);
+        // 1. Spawning sparks (110 to 160 tiny glowing embers with trails)
+        let count = gen_range(110, 160);
         for _ in 0..count {
             let angle = gen_range(0.0, 2.0 * PI);
-            // Lower average speeds combined with high-velocity outliers for a gorgeous dispersion
             let speed = if gen_range(0.0, 1.0) < 0.75 {
                 gen_range(15.0, 45.0)
             } else {
@@ -131,8 +131,8 @@ impl ExplosionParticleSystem {
             };
             let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
 
-            // Vibrant, high-end retro pixel color palette (70% warm ember colors, 30% soft ashes)
-            let color = if gen_range(0.0, 1.0) < 0.7 {
+            // Vibrant, high-end retro pixel color palette (Red -> Orange -> Yellow -> White core)
+            let color = if gen_range(0.0, 1.0) < 0.75 {
                 match gen_range(0, 4) {
                     0 => Color::new(1.0, gen_range(0.0, 0.2), 0.0, 1.0),       // Incandescent Red
                     1 => Color::new(1.0, gen_range(0.3, 0.6), 0.0, 1.0),       // Hot Orange
@@ -140,15 +140,13 @@ impl ExplosionParticleSystem {
                     _ => Color::new(1.0, 0.95, 0.6, 1.0),                      // White-hot core
                 }
             } else {
-                // Smoke/debris colors: slate gray to light translucent ash
-                let gray = gen_range(0.3, 0.7);
-                Color::new(gray, gray, gray, gen_range(0.5, 0.8))
+                // Sparks of ash gray
+                let gray = gen_range(0.4, 0.6);
+                Color::new(gray, gray, gray, gen_range(0.6, 0.9))
             };
 
-            // Ultra-fine, tiny pixelated particles (0.12 to 0.42) for high-end aesthetics
-            let initial_size = gen_range(0.12, 0.42);
-            // Longer lifetime to let particles fall all the way to platforms or the floor (Y=100)
-            let lifetime = gen_range(1.2, 2.8);
+            let initial_size = gen_range(0.12, 0.38);
+            let lifetime = gen_range(1.2, 2.6);
 
             self.particles.push(ExplosionParticle {
                 position: pos,
@@ -158,62 +156,94 @@ impl ExplosionParticleSystem {
                 lifetime,
                 max_lifetime: lifetime,
                 trail: Vec::new(),
+                is_smoke: false,
+            });
+        }
+
+        // 2. Spawning smoke puffs (20 to 35 larger expanding clouds)
+        let smoke_count = gen_range(20, 35);
+        for _ in 0..smoke_count {
+            let angle = gen_range(0.0, 2.0 * PI);
+            // Smoke expands slowly and drifts upwards
+            let speed = gen_range(4.0, 15.0);
+            let velocity = Vec2::new(
+                angle.cos() * speed,
+                angle.sin() * speed - gen_range(10.0, 18.0) // upward buoyancy drift
+            );
+
+            // Soft ash-gray and translucent white-smoke colors
+            let gray = gen_range(0.55, 0.8);
+            let color = Color::new(gray, gray, gray, gen_range(0.15, 0.35));
+
+            let initial_size = gen_range(0.5, 1.2);
+            let lifetime = gen_range(0.6, 1.3);
+
+            self.particles.push(ExplosionParticle {
+                position: pos,
+                velocity,
+                color,
+                initial_size,
+                lifetime,
+                max_lifetime: lifetime,
+                trail: Vec::new(),
+                is_smoke: true,
             });
         }
     }
 
     pub fn update(&mut self, dt: f32, wallmap: &[Rect]) {
-        // Optimized gravity/friction values for smooth parabolic rain and floor/platform bouncing
-        let gravity = 65.0;     // Balanced gravity for realistic acceleration
-        let friction = 0.5;    // Low air friction keeps horizontal velocity intact for wider arcs
-        let elasticity = 0.35;  // Bounces slightly ("un tout petit peu") as requested by the user
+        let gravity = 65.0;
+        let friction = 0.5;
+        let elasticity = 0.35;
         let floor_y = 100.0;
 
         for p in &mut self.particles {
-            // Push current position to trail history (keep up to 9 points)
-            p.trail.push(p.position);
-            if p.trail.len() > 9 {
-                p.trail.remove(0);
-            }
+            if p.is_smoke {
+                // Smoke physics: upward buoyancy and high air resistance
+                p.velocity.y -= 12.0 * dt; // upward drift
+                p.velocity *= 1.0 - (2.5 * dt); // fast deceleration
+                p.position += p.velocity * dt;
+            } else {
+                // Sparks physics: gravity, friction, trailing and platform bouncing
+                p.trail.push(p.position);
+                if p.trail.len() > 9 {
+                    p.trail.remove(0);
+                }
 
-            // Apply gravity
-            p.velocity.y += gravity * dt;
-            // Apply air resistance/friction
-            p.velocity *= 1.0 - (friction * dt);
+                p.velocity.y += gravity * dt;
+                p.velocity *= 1.0 - (friction * dt);
 
-            // Compute next tentative position
-            let next_pos = p.position + p.velocity * dt;
-            let mut bounced = false;
+                let next_pos = p.position + p.velocity * dt;
+                let mut bounced = false;
 
-            // 1. Collision with the screen bottom floor (Y = 100.0)
-            if p.velocity.y > 0.0 && next_pos.y >= floor_y {
-                p.position.y = floor_y;
-                p.position.x = next_pos.x;
-                p.velocity.y = -elasticity * p.velocity.y;
-                bounced = true;
-            }
+                // 1. Collision with bottom floor (Y = 100.0)
+                if p.velocity.y > 0.0 && next_pos.y >= floor_y {
+                    p.position.y = floor_y;
+                    p.position.x = next_pos.x;
+                    p.velocity.y = -elasticity * p.velocity.y;
+                    bounced = true;
+                }
 
-            // 2. Collision with top surfaces of wallmap platforms
-            if !bounced && p.velocity.y > 0.0 {
-                for wall in wallmap {
-                    if next_pos.x >= wall.x && next_pos.x <= wall.x + wall.w {
-                        if p.position.y <= wall.y && next_pos.y >= wall.y {
-                            p.position.y = wall.y;
-                            p.position.x = next_pos.x;
-                            p.velocity.y = -elasticity * p.velocity.y;
-                            bounced = true;
-                            break;
+                // 2. Collision with platform top surfaces
+                if !bounced && p.velocity.y > 0.0 {
+                    for wall in wallmap {
+                        if next_pos.x >= wall.x && next_pos.x <= wall.x + wall.w {
+                            if p.position.y <= wall.y && next_pos.y >= wall.y {
+                                p.position.y = wall.y;
+                                p.position.x = next_pos.x;
+                                p.velocity.y = -elasticity * p.velocity.y;
+                                bounced = true;
+                                break;
+                            }
                         }
                     }
                 }
+
+                if !bounced {
+                    p.position = next_pos;
+                }
             }
 
-            // If no bounce occurred, perform normal movement
-            if !bounced {
-                p.position = next_pos;
-            }
-
-            // Age particle
             p.lifetime -= dt;
         }
 
@@ -225,36 +255,48 @@ impl ExplosionParticleSystem {
         for p in &self.particles {
             let progress = (p.lifetime / p.max_lifetime).clamp(0.0, 1.0);
             let mut render_color = p.color;
-            render_color.a = progress; // Fade out
-            let size = p.initial_size * progress; // Shrink
+            render_color.a = progress * p.color.a; // Smooth fade out
 
-            // 1. Draw trail segments with fading alpha and size
-            let trail_len = p.trail.len();
-            for (i, trail_pos) in p.trail.iter().enumerate() {
-                let trail_progress = (i + 1) as f32 / (trail_len + 1) as f32;
-                let mut trail_color = render_color;
-                // Increased trail visibility (alpha multiplier set to 0.7)
-                trail_color.a = render_color.a * 0.7 * trail_progress; 
-                // Slightly larger trail elements (0.45 min scale) for better presence
-                let trail_size = size * (0.45 + 0.55 * trail_progress);
-
+            if p.is_smoke {
+                // Smoke expands over time (grows to 1.8x original size)
+                let size = p.initial_size * (1.8 - 0.8 * progress);
                 draw_rectangle(
-                    trail_pos.x - trail_size / 2.0,
-                    trail_pos.y - trail_size / 2.0,
-                    trail_size,
-                    trail_size,
-                    trail_color,
+                    p.position.x - size / 2.0,
+                    p.position.y - size / 2.0,
+                    size,
+                    size,
+                    render_color,
+                );
+            } else {
+                // Sparks rendering with trails
+                let size = p.initial_size * progress; // Shrink
+
+                // 1. Draw trail segments with fading alpha and size
+                let trail_len = p.trail.len();
+                for (i, trail_pos) in p.trail.iter().enumerate() {
+                    let trail_progress = (i + 1) as f32 / (trail_len + 1) as f32;
+                    let mut trail_color = render_color;
+                    trail_color.a = render_color.a * 0.7 * trail_progress; 
+                    let trail_size = size * (0.45 + 0.55 * trail_progress);
+
+                    draw_rectangle(
+                        trail_pos.x - trail_size / 2.0,
+                        trail_pos.y - trail_size / 2.0,
+                        trail_size,
+                        trail_size,
+                        trail_color,
+                    );
+                }
+
+                // 2. Render main particle as retro square pixels
+                draw_rectangle(
+                    p.position.x - size / 2.0,
+                    p.position.y - size / 2.0,
+                    size,
+                    size,
+                    render_color,
                 );
             }
-
-            // 2. Render main particle as retro square pixels
-            draw_rectangle(
-                p.position.x - size / 2.0,
-                p.position.y - size / 2.0,
-                size,
-                size,
-                render_color,
-            );
         }
     }
 }
