@@ -84,6 +84,15 @@ impl Player {
                 self.jump_available -= 1;
                 }
         }
+
+        // --- SCREEN BOUNDS CLAMP ---
+        let aspect_ratio = screen_width() / screen_height();
+        let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
+        if self.hitbox.x < 0.0 {
+            self.hitbox.x = 0.0;
+        } else if self.hitbox.x > virtual_width - self.hitbox.w {
+            self.hitbox.x = virtual_width - self.hitbox.w;
+        }
     }
 
 
