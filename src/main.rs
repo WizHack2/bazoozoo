@@ -10,8 +10,6 @@ mod map_loading;
 use game::Game;
 use assets::Assets;
 use boilerplate::network::NetworkManager;
-use boilerplate::network::PlayerState;
-use boilerplate::network::GameMessage;
 
 #[macroquad::main("My Game")]
 async fn main() {
@@ -22,8 +20,8 @@ async fn main() {
     let assets = Assets::load().await;
 
     // Init de la partie
-    //TODO un menu pour choisir si on est host ou client et entrer l'url de la salle
-    let is_host = false; 
+    let args: Vec<String> = std::env::args().collect();
+    let is_host = !args.contains(&"--client".to_string()); 
     let mut game = Game::new(&assets, is_host);
 
     // Init connexion partie

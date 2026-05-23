@@ -5,11 +5,15 @@ pub struct Animation {
     color: Color,
     cols: usize,
     rows: usize,
+    #[allow(dead_code)]
     frame_counts: Vec<usize>,
     pub current_row: usize,
     pub current_frame: usize,
+    #[allow(dead_code)]
     timer: f32,
+    #[allow(dead_code)]
     looping: bool,
+    #[allow(dead_code)]
     durations_per_frame: Vec<f32>,
 }
 
@@ -23,6 +27,7 @@ impl Animation {
         }
     }
 
+    #[allow(dead_code)]
     pub fn play_animation(&mut self, row: usize, looping: bool, durations: &[f32]) -> bool {
 
         // Intitialisation si on appelle pour jouer une nouvelle animation
@@ -57,6 +62,7 @@ impl Animation {
         finished
     }
 
+    #[allow(dead_code)]
     pub fn skip_current_frame(&mut self) -> bool {
         self.current_frame +=1;
 
@@ -73,6 +79,7 @@ impl Animation {
         return false;
     }
 
+    #[allow(dead_code)]
     pub fn change_color(&mut self, color: Color) {
         self.color =  color;
     }

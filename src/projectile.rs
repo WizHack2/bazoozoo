@@ -32,8 +32,8 @@ impl Projectile {
         }
     }
 
-    pub fn update(&mut self, dt: f32, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, autres_joueurs: &mut Vec<Player>) {
-        self.check_collisions(wallmap, hitboxes_murs, autres_joueurs);
+    pub fn update(&mut self, dt: f32, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, autres_joueurs: &mut Vec<Player>, local_player: Option<&mut Player>) {
+        self.check_collisions(wallmap, hitboxes_murs, autres_joueurs, local_player);
         if self.is_exploding {
             self.explosion_duration -= dt;
             // Le rayon change pendant l'explosion
@@ -54,15 +54,22 @@ impl Projectile {
         }
     }
 
-    pub fn check_collisions(&mut self, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, joueurs: &mut Vec<Player>) {
+    pub fn check_collisions(&mut self, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) {
         if self.is_exploding {
             // Phase d'explosion : infliger les dégâts de zone
             for joueur in joueurs {
                 if self.hitbox.overlaps_rect(&joueur.hitbox) {
-                    let id = joueur.id as usize;
                     if !self.players_already_damaged.contains(&joueur.id) && joueur.id != self.owner_id { 
                         self.players_already_damaged.push(joueur.id); // On l'ajoute
                         joueur.take_damage(self.degats);
+                    }
+                }
+            }
+            if let Some(ref mut lp) = local_player {
+                if self.hitbox.overlaps_rect(&lp.hitbox) {
+                    if !self.players_already_damaged.contains(&lp.id) && lp.id != self.owner_id {
+                        self.players_already_damaged.push(lp.id);
+                        lp.take_damage(self.degats);
                     }
                 }
             }
@@ -71,8 +78,9 @@ impl Projectile {
             let touche_map = wallmap.iter().any(|wall| self.hitbox.overlaps_rect(wall));
             let touche_mur = hitboxes_murs.iter().any(|mur| self.hitbox.overlaps_rect(mur));
             let touche_joueur = joueurs.iter().any(|j| j.id != self.owner_id && self.hitbox.overlaps_rect(&j.hitbox));
+            let touche_local = local_player.as_ref().map_or(false, |lp| lp.id != self.owner_id && self.hitbox.overlaps_rect(&lp.hitbox));
 
-            if touche_mur || touche_map || touche_joueur {
+            if touche_mur || touche_map || touche_joueur || touche_local {
                 self.explode();
             }
         }

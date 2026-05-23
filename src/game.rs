@@ -2,7 +2,6 @@ use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::map_loading::charger_hitboxes;
-use crate::player;
 use crate::player::*;
 use crate::Assets;
 use crate::projectile::Projectile;
@@ -66,15 +65,6 @@ impl Game {
             pending_shot: false,
             pending_mouse_x: 0.0,
             pending_mouse_y: 0.0
-        }
-    }
-
-    pub fn add_player(&mut self,Player_a_ajouter:Player){
-        if self.other_players.len()>3{
-            println!("erreur nombre max de joueur atteint");
-        }
-        else{
-        self.other_players.push(Player_a_ajouter);
         }
     }
 
@@ -158,6 +148,8 @@ impl Game {
             //TODO ajouter condition sur provenance du projectile pour eviter le tir alié
             // 1. TOI tu tires sur les autres (Ça, ça ne pose aucun problème)
             self.player.update_projectile(&self.wallmap, &hitboxes_murs, &mut self.other_players, dt);
+            self.player.projectiles.retain(|p| !p.is_dead());
+            
             // 2. On CONFISQUE temporairement les projectiles de TOUS les autres joueurs
             // std::mem::take remplace leurs projectiles par une liste vide le temps du calcul
             let mut projectiles_des_autres: Vec<Vec<Projectile>> = self.other_players
@@ -167,14 +159,23 @@ impl Game {
             // 3. Maintenant que les joueurs n'ont plus leurs balles dans les poches, 
             // la liste `other_players` est totalement LIBRE ! On peut faire les calculs.
             for liste_projs in &mut projectiles_des_autres {
-                for proj in liste_projs {
-                    // Les balles des autres peuvent toucher les autres
-                    proj.update(dt, &self.wallmap, &hitboxes_murs, &mut self.other_players);
+                for proj in liste_projs.iter_mut() {
+                    // Les balles des autres peuvent toucher les autres, et l'hôte !
+                    proj.update(dt, &self.wallmap, &hitboxes_murs, &mut self.other_players, Some(&mut self.player));
                 }
+                liste_projs.retain(|p| !p.is_dead());
             }
             // 4. On REND les balles à leurs propriétaires
             for (i, joueur) in self.other_players.iter_mut().enumerate() {
                 joueur.projectiles = std::mem::take(&mut projectiles_des_autres[i]);
+            }
+
+            for other in &mut self.other_players {
+                if other.pv <= 0.0 {
+                    other.pv = 100.0;
+                    other.hitbox.x = 20.0;
+                    other.hitbox.y = 20.0;
+                }
             }
         }
         self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
@@ -241,7 +242,7 @@ impl Game {
             id: self.player.id,
             x: self.player.hitbox.x,
             y: self.player.hitbox.y,
-            pv: self.player.PV,
+            pv: self.player.pv,
             projectiles: my_net_projs,
         });
 
@@ -254,7 +255,7 @@ impl Game {
                 id: other.id,
                 x: other.hitbox.x,
                 y: other.hitbox.y,
-                pv: other.PV,
+                pv: other.pv,
                 projectiles: other_net_projs,
             });
         }
@@ -269,7 +270,7 @@ impl Game {
                 if let Some(other) = self.other_players.iter_mut().find(|p| p.id == net_p.id) {
                     other.hitbox.x = net_p.x;
                     other.hitbox.y = net_p.y;
-                    other.PV = net_p.pv;
+                    other.pv = net_p.pv;
                     
                     other.projectiles.clear();
                     for net_proj in net_p.projectiles {
@@ -283,7 +284,11 @@ impl Game {
                         other.projectiles.push(projectile_marionnette);
                     }
                 } else if net_p.id == self.player.id {
-                    self.player.PV = net_p.pv;
+                    if self.player.pv < 100.0 && net_p.pv == 100.0 && net_p.x == 20.0 && net_p.y == 20.0 {
+                        self.player.hitbox.x = 20.0;
+                        self.player.hitbox.y = 20.0;
+                    }
+                    self.player.pv = net_p.pv;
                     self.player.projectiles.clear();
                     
                     for net_proj in net_p.projectiles {
@@ -303,7 +308,7 @@ impl Game {
                     new_p.id = net_p.id;
                     new_p.hitbox.x = net_p.x;
                     new_p.hitbox.y = net_p.y;
-                    new_p.PV = net_p.pv;
+                    new_p.pv = net_p.pv;
                     self.other_players.push(new_p);
                 }
             }

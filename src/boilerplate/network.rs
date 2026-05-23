@@ -34,6 +34,7 @@ impl NetworkManager {
         Self { socket }
     }
 
+    #[allow(dead_code)]
     pub fn update_and_receive(&mut self) -> Vec<PlayerState> {
         self.socket.update_peers();
 

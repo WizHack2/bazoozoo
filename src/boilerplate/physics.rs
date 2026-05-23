@@ -23,6 +23,7 @@ impl Physics {
         self.apply_friction();
     }
 
+    #[allow(dead_code)]
     pub fn get_velocity(& self)-> f32{
         self.velocity.y
     }
@@ -54,10 +55,12 @@ impl Physics {
         }
     }
     
+    #[allow(dead_code)]
     pub fn set_velocity_x(&mut self, new_velocity: f32) {
         self.velocity.x = new_velocity;
     }
 
+    #[allow(dead_code)]
     pub fn add_velocity_x(&mut self, added_velocity: f32) {
         self.velocity.x += added_velocity;
     }
@@ -66,6 +69,7 @@ impl Physics {
         self.velocity.y = new_velocity;
     }
 
+    #[allow(dead_code)]
     pub fn set_gravity(&mut self, new_gravity: f32) {
         self.gravity_force = new_gravity;
     }

@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
 use crate::projectile::Projectile;
-use crate::{assets, boilerplate::animation::Animation};
+use crate::boilerplate::animation::Animation;
 use crate::boilerplate::physics::Physics;
 use crate::game::VIRTUAL_HEIGHT;
 
@@ -10,7 +10,7 @@ pub struct Player {
     pub hitbox:Rect,
     pub speed: f32,
     pub projectiles: Vec<Projectile>,
-    pub PV : f32,
+    pub pv : f32,
     physics : Physics,
     jump_available: i32,
 }
@@ -23,7 +23,7 @@ impl Player {
             hitbox: Rect::new(0.0,0.0,10.0,10.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
             projectiles: Vec::new(),
-            PV : 25.,
+            pv : 100.,
             physics : Physics::new(200., 0.5),
             jump_available: 2
          }
@@ -31,20 +31,20 @@ impl Player {
     }
 
     pub fn take_damage(&mut self,val:f32){
-        if self.PV - val < 0. {
-            self.PV = 0.;
+        if self.pv - val < 0. {
+            self.pv = 0.;
         }
         else{
-            self.PV -= val;
+            self.pv -= val;
         }
     }
 
     pub fn heal(&mut self,val:f32){
-        if self.PV + val > 100. {
-            self.PV = 100.;
+        if self.pv + val > 100. {
+            self.pv = 100.;
         }
         else{
-            self.PV += val;
+            self.pv += val;
         }
     }
 
@@ -87,20 +87,16 @@ impl Player {
     }
 
 
-    pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>, joueurs: &mut Vec<Player>,is_host: bool) {
+    pub fn update(&mut self, camera: &Camera2D, wallmap:&Vec<Rect>, _joueurs: &mut Vec<Player>, is_host: bool) {
+        if self.pv <= 0.0 {
+            self.pv = 100.0;
+            self.hitbox.x = 20.0;
+            self.hitbox.y = 20.0;
+        }
+
         let dt = get_frame_time().clamp(0.001, 0.05);
 
         self.handle_input(dt, wallmap);
-        
-        
-
-
-
-
-
-
-
-        //// NE PAS REGARDER EN DESSOUS. C"EST DEGEULASSE TODO A EXPLOSER SA GRAND MERE
 
         //--- GRAVITE ---
         let old_y = self.hitbox.y;
@@ -113,20 +109,6 @@ impl Player {
             self.tirer_projectile(camera);
         }
 
-        //--- DEFINITION DES HITBOXES ----
-        let aspect_ratio = screen_width() / screen_height();
-        let virtual_width = VIRTUAL_HEIGHT * aspect_ratio; 
-        let virtual_height = VIRTUAL_HEIGHT;
-
-        let epaisseur = 50.0;
-        let mur_gauche = Rect::new(-epaisseur, 0.0, epaisseur, virtual_height);
-        let mur_droit  = Rect::new(virtual_width, 0.0, epaisseur, virtual_height);
-        let mur_haut   = Rect::new(-epaisseur, -epaisseur, virtual_width + epaisseur * 2.0, epaisseur);
-        let mur_bas    = Rect::new(-epaisseur, virtual_height, virtual_width + epaisseur * 2.0, epaisseur);
-
-        // On les met dans un tableau pour les tester facilement
-        let hitboxes_murs = vec![mur_gauche, mur_droit, mur_haut, mur_bas];
-
         //--- COLISION
         if self.hitbox.y > VIRTUAL_HEIGHT - self.hitbox.h {
             self.hitbox.y = VIRTUAL_HEIGHT - self.hitbox.h;
@@ -136,7 +118,7 @@ impl Player {
 
         for wall in wallmap {
             if self.hitbox.overlaps(wall) {
-                ///let vy = self.physics.get_velocity();
+                //let vy = self.physics.get_velocity();
                 if dy > 0.0 {
                     // On tombe. On se pose PILE sur le mur.
                     self.hitbox.y = wall.y - self.hitbox.h;
@@ -150,24 +132,19 @@ impl Player {
             }
         }
 
-        //for proj in &mut self.projectiles {
-        //    proj.update(dt, wallmap, &hitboxes_murs, joueurs);
-        //}
-        //self.update_projectile(wallmap, &hitboxes_murs, joueurs,dt);
-
     }
 
     pub fn update_projectile(&mut self,wallmap:&Vec<Rect>, hitboxes_murs:&Vec<Rect>,joueurs:&mut Vec<Player>,dt:f32){
         for proj in &mut self.projectiles {
-            proj.update(dt, wallmap, hitboxes_murs, joueurs);
+            proj.update(dt, wallmap, hitboxes_murs, joueurs, None);
         }
     }
 
     pub fn draw_healthbar(& self){
         let width:f32 = 6.;
         
-        draw_rectangle(self.hitbox.x + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*self.PV/100., 0.3, GREEN);
-        draw_rectangle(self.hitbox.x + width*self.PV/100. + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*(100.-self.PV)/100., 0.3, RED);
+        draw_rectangle(self.hitbox.x + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*self.pv/100., 0.3, GREEN);
+        draw_rectangle(self.hitbox.x + width*self.pv/100. + self.hitbox.w/2. - width/2., self.hitbox.y + self.hitbox.h + 0.2, width*(100.-self.pv)/100., 0.3, RED);
     }
 
     pub fn draw(&self) {

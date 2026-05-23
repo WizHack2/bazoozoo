@@ -1,6 +1,6 @@
 use macroquad::prelude::Rect;
 use serde::Deserialize;
-use std::{fs, path};
+use std::fs;
 
 // On reproduit exactement la structure du JSON !
 #[derive(Deserialize)]
