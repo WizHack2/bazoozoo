@@ -319,12 +319,6 @@ impl Player {
         }
     }
 
-    pub fn update_projectile(&mut self, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, joueurs: &mut Vec<Player>, dt: f32) {
-        for proj in &mut self.projectiles {
-            proj.update(dt, wallmap, hitboxes_murs, joueurs, None);
-        }
-    }
-
     pub fn draw_healthbar(&self) {
         let width: f32 = 6.;
 

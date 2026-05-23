@@ -2,9 +2,9 @@ use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::map_loading::charger_hitboxes;
-use crate::player::*;
+use crate::player::Player;
 use crate::Assets;
-use crate::projectile::Projectile;
+use crate::projectile::{Projectile, ExplosionParticleSystem};
 use crate::boilerplate::network::{PlayerState, NetworkManager, GameMessage};
 
 pub const VIRTUAL_HEIGHT: f32 = 100.0;
@@ -53,6 +53,7 @@ pub struct Game {
     pub pending_shot: bool,
     pub pending_mouse_x: f32,
     pub pending_mouse_y: f32,
+    pub explosion_particles: ExplosionParticleSystem,
 }
 
 impl Game {
@@ -72,7 +73,8 @@ impl Game {
             last_network_send: macroquad::time::get_time(),
             pending_shot: false,
             pending_mouse_x: 0.0,
-            pending_mouse_y: 0.0
+            pending_mouse_y: 0.0,
+            explosion_particles: ExplosionParticleSystem::new(),
         }
     }
 
@@ -166,9 +168,14 @@ impl Game {
 
         let dt = get_frame_time().clamp(0.001, 0.05);
         if self.is_host{
-            //TODO ajouter condition sur provenance du projectile pour eviter le tir alié
-            // 1. TOI tu tires sur les autres (Ça, ça ne pose aucun problème)
-            self.player.update_projectile(&self.wallmap, &hitboxes_murs, &mut self.other_players, dt);
+            // 1. TOI tu tires sur les autres
+            for proj in &mut self.player.projectiles {
+                let was_exploding = proj.is_exploding;
+                proj.update(dt, &self.wallmap, &hitboxes_murs, &mut self.other_players, None);
+                if !was_exploding && proj.is_exploding {
+                    self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
+                }
+            }
             self.player.projectiles.retain(|p| !p.is_dead());
             
             // 2. On CONFISQUE temporairement les projectiles de TOUS les autres joueurs
@@ -182,7 +189,11 @@ impl Game {
             for liste_projs in &mut projectiles_des_autres {
                 for proj in liste_projs.iter_mut() {
                     // Les balles des autres peuvent toucher les autres, et l'hôte !
+                    let was_exploding = proj.is_exploding;
                     proj.update(dt, &self.wallmap, &hitboxes_murs, &mut self.other_players, Some(&mut self.player));
+                    if !was_exploding && proj.is_exploding {
+                        self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
+                    }
                 }
                 liste_projs.retain(|p| !p.is_dead());
             }
@@ -200,6 +211,7 @@ impl Game {
             }
         }
         self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
+        self.explosion_particles.update(dt);
 
         let time_now = macroquad::time::get_time();
         let network_tick_rate = 1.0 / 120.0;
@@ -338,6 +350,8 @@ impl Game {
             player.draw()
         }
 
+        self.explosion_particles.draw();
+
         // --- DESSIN DE L'UI (Sans la caméra) ---
         set_default_camera();
 
@@ -393,7 +407,7 @@ impl Game {
                     other.hitbox.y = net_p.y;
                     other.pv = net_p.pv;
                     
-                    other.projectiles.clear();
+                    let old_projectiles = std::mem::take(&mut other.projectiles);
                     for net_proj in net_p.projectiles {
                         let mut projectile_marionnette = Projectile::new(other.id, net_proj.x, net_proj.y, net_proj.x, net_proj.y);
                         projectile_marionnette.hitbox.x = net_proj.x;
@@ -401,6 +415,15 @@ impl Game {
                         
                         projectile_marionnette.hitbox.r = net_proj.r; 
                         projectile_marionnette.is_exploding = net_proj.is_exploding; 
+                        
+                        let was_exploding = old_projectiles.iter()
+                            .find(|p| (p.hitbox.x - net_proj.x).abs() < 5.0 && (p.hitbox.y - net_proj.y).abs() < 5.0)
+                            .map(|p| p.is_exploding)
+                            .unwrap_or(false);
+
+                        if !was_exploding && net_proj.is_exploding {
+                            self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
+                        }
                         
                         other.projectiles.push(projectile_marionnette);
                     }
@@ -410,8 +433,8 @@ impl Game {
                         self.player.hitbox.y = 20.0;
                     }
                     self.player.pv = net_p.pv;
-                    self.player.projectiles.clear();
                     
+                    let old_projectiles = std::mem::take(&mut self.player.projectiles);
                     for net_proj in net_p.projectiles {
                         let mut projectile_marionnette = Projectile::new(self.player.id, net_proj.x, net_proj.y, net_proj.x, net_proj.y);
                         projectile_marionnette.hitbox.x = net_proj.x;
@@ -419,6 +442,15 @@ impl Game {
 
                         projectile_marionnette.hitbox.r = net_proj.r; 
                         projectile_marionnette.is_exploding = net_proj.is_exploding;
+                        
+                        let was_exploding = old_projectiles.iter()
+                            .find(|p| (p.hitbox.x - net_proj.x).abs() < 5.0 && (p.hitbox.y - net_proj.y).abs() < 5.0)
+                            .map(|p| p.is_exploding)
+                            .unwrap_or(false);
+
+                        if !was_exploding && net_proj.is_exploding {
+                            self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
+                        }
                         
                         self.player.projectiles.push(projectile_marionnette);
                     }
