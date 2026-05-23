@@ -102,6 +102,7 @@ pub struct ExplosionParticle {
     pub initial_size: f32,
     pub lifetime: f32,
     pub max_lifetime: f32,
+    pub trail: Vec<Vec2>, // Motion history to render trailing sparks
 }
 
 pub struct ExplosionParticleSystem {
@@ -144,8 +145,8 @@ impl ExplosionParticleSystem {
                 Color::new(gray, gray, gray, gen_range(0.5, 0.8))
             };
 
-            // Much smaller, pixelated particles (0.3 to 0.8)
-            let initial_size = gen_range(0.3, 0.8);
+            // Ultra-fine, tiny pixelated particles (0.12 to 0.42) for high-end aesthetics
+            let initial_size = gen_range(0.12, 0.42);
             // Longer lifetime to let particles fall all the way to platforms or the floor (Y=100)
             let lifetime = gen_range(1.2, 2.8);
 
@@ -156,6 +157,7 @@ impl ExplosionParticleSystem {
                 initial_size,
                 lifetime,
                 max_lifetime: lifetime,
+                trail: Vec::new(),
             });
         }
     }
@@ -168,6 +170,12 @@ impl ExplosionParticleSystem {
         let floor_y = 100.0;
 
         for p in &mut self.particles {
+            // Push current position to trail history (keep up to 5 points)
+            p.trail.push(p.position);
+            if p.trail.len() > 5 {
+                p.trail.remove(0);
+            }
+
             // Apply gravity
             p.velocity.y += gravity * dt;
             // Apply air resistance/friction
@@ -220,7 +228,26 @@ impl ExplosionParticleSystem {
             render_color.a = progress; // Fade out
             let size = p.initial_size * progress; // Shrink
 
-            // Render as retro square pixels
+            // 1. Draw trail segments with fading alpha and size
+            let trail_len = p.trail.len();
+            for (i, trail_pos) in p.trail.iter().enumerate() {
+                let trail_progress = (i + 1) as f32 / (trail_len + 1) as f32;
+                let mut trail_color = render_color;
+                // Deeper trail alpha fade (older points are fainter)
+                trail_color.a = render_color.a * 0.45 * trail_progress; 
+                // Smaller size for older trail elements
+                let trail_size = size * (0.35 + 0.65 * trail_progress);
+
+                draw_rectangle(
+                    trail_pos.x - trail_size / 2.0,
+                    trail_pos.y - trail_size / 2.0,
+                    trail_size,
+                    trail_size,
+                    trail_color,
+                );
+            }
+
+            // 2. Render main particle as retro square pixels
             draw_rectangle(
                 p.position.x - size / 2.0,
                 p.position.y - size / 2.0,
