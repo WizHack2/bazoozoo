@@ -359,10 +359,11 @@ impl Game {
         let font_size = 20.0;
         let text_color = LIGHTGRAY;
         draw_text("Pressez [M] pour changer de carte | [F3] pour afficher/masquer les hitboxes de debug", 10.0, 30.0, font_size, text_color);
+        draw_text("[Clic gauche] Tirer a la souris | Rockets : [T] haut [G] bas [F] gauche [H] droite | Le recul propulse !", 10.0, 55.0, font_size, Color::new(1.0, 0.8, 0.2, 1.0));
         if self.is_hollow_map {
-            draw_text("Carte active : Hollow Knight (Pixel Art)", 10.0, 55.0, font_size, SKYBLUE);
+            draw_text("Carte active : Hollow Knight (Pixel Art)", 10.0, 80.0, font_size, SKYBLUE);
         } else {
-            draw_text("Carte active : Origine", 10.0, 55.0, font_size, ORANGE);
+            draw_text("Carte active : Origine", 10.0, 80.0, font_size, ORANGE);
         }
     }
 

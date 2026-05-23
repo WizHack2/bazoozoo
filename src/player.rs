@@ -78,6 +78,10 @@ pub struct Player {
     pub is_grounded: bool,
     pub was_grounded: bool,
     pub dust_timer: f32,
+
+    // --- TIR CLAVIER + RECUL ---
+    /// Cooldown en secondes avant de pouvoir retirer une rocket (clavier)
+    pub rocket_cooldown: f32,
 }
 
 impl Player {
@@ -89,13 +93,15 @@ impl Player {
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
             projectiles: Vec::new(),
             pv: 100.0,
-            physics: Physics::new(200.0, 0.5),
+            physics: Physics::new(200.0, 250.0),
             jump_available: 2,
 
             particles: ParticleSystem::new(),
             is_grounded: false,
             was_grounded: false,
             dust_timer: 0.0,
+
+            rocket_cooldown: 0.0,
         }
     }
 
@@ -125,6 +131,43 @@ impl Player {
         self.projectiles.push(nouveau_projectile);
     }
 
+    /// Tire une rocket dans une direction et applique un RECUL immédiat au joueur.
+    /// C'est le recul qui crée le rocket jump, pas l'explosion.
+    fn tirer_projectile_clavier(&mut self, dir: Vec2) {
+        let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+        let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+        // On décale le point de spawn pour éviter une auto-collision immédiate
+        let spawn_x = center_x + dir.x * 6.0;
+        let spawn_y = center_y + dir.y * 6.0;
+        let target_x = center_x + dir.x * 100.0;
+        let target_y = center_y + dir.y * 100.0;
+        let projectile = Projectile::new(self.id, spawn_x, spawn_y, target_x, target_y);
+        self.projectiles.push(projectile);
+
+        // --- RECUL DE L'ARME (rocket jump) ---
+        // Le joueur reçoit une impulsion dans la direction OPPOSÉE au tir
+        const RECOIL_FORCE: f32 = 80.0;
+        let recoil = -dir * RECOIL_FORCE;
+        self.apply_recoil(recoil);
+
+        self.rocket_cooldown = 0.4;
+    }
+
+    /// Applique un recul d'arme au joueur (impulsion immédiate)
+    fn apply_recoil(&mut self, impulse: Vec2) {
+        // Si le recul pousse vers le haut et qu'on est au sol,
+        // on SET la velocity Y pour garantir la hauteur du saut
+        if impulse.y < 0.0 {
+            self.physics.set_velocity_y(impulse.y);
+            if impulse.x.abs() > 0.01 {
+                self.physics.add_velocity_x(impulse.x);
+            }
+        } else {
+            // Recul latéral ou vers le bas : on cumule
+            self.physics.add_velocity(impulse);
+        }
+    }
+
     pub fn handle_input(&mut self, dt: f32, wallmap: &Vec<Rect>) {
         //////////////////////////////////////////////////////////////////////////////////////////////// TODO A SUPPRIMER V FINALE
         if is_key_pressed(KeyCode::P){
@@ -152,6 +195,30 @@ impl Player {
                 self.physics.jump(100.);
                 self.jump_available -= 1;
                 }
+        }
+
+        // --- TIR CLAVIER : T/G/F/H/R/Y/V/N = une touche par direction (AZERTY) ---
+        if self.rocket_cooldown > 0.0 {
+            self.rocket_cooldown -= dt;
+        }
+        if self.rocket_cooldown <= 0.0 {
+            if is_key_pressed(KeyCode::T) {
+                self.tirer_projectile_clavier(vec2(0.0, -1.0)); // Haut
+            } else if is_key_pressed(KeyCode::G) {
+                self.tirer_projectile_clavier(vec2(0.0, 1.0));  // Bas
+            } else if is_key_pressed(KeyCode::F) {
+                self.tirer_projectile_clavier(vec2(-1.0, 0.0)); // Gauche
+            } else if is_key_pressed(KeyCode::H) {
+                self.tirer_projectile_clavier(vec2(1.0, 0.0));  // Droite
+            } else if is_key_pressed(KeyCode::R) {
+                self.tirer_projectile_clavier(vec2(-1.0, -1.0).normalize()); // Haut-Gauche
+            } else if is_key_pressed(KeyCode::Y) {
+                self.tirer_projectile_clavier(vec2(1.0, -1.0).normalize());  // Haut-Droite
+            } else if is_key_pressed(KeyCode::V) {
+                self.tirer_projectile_clavier(vec2(-1.0, 1.0).normalize());  // Bas-Gauche
+            } else if is_key_pressed(KeyCode::N) {
+                self.tirer_projectile_clavier(vec2(1.0, 1.0).normalize());   // Bas-Droite
+            }
         }
 
         // --- SCREEN BOUNDS CLAMP ---
@@ -186,8 +253,23 @@ impl Player {
         let dy = self.hitbox.y - old_y; // Velocity direction detection
 
         // --- LOGIQUE DE TIR ---
-        if is_host && is_mouse_button_pressed(MouseButton::Left) {
-            self.tirer_projectile(camera);
+        if is_mouse_button_pressed(MouseButton::Left) {
+            let mouse_pos = mouse_position();
+            let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
+            let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+            let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+            let dir = vec2(world_mouse.x - center_x, world_mouse.y - center_y);
+            let length = dir.length();
+            if length > 0.0 {
+                let dir = dir / length;
+                const RECOIL_FORCE: f32 = 80.0;
+                let recoil = -dir * RECOIL_FORCE;
+                self.apply_recoil(recoil);
+            }
+
+            if is_host {
+                self.tirer_projectile(camera);
+            }
         }
 
         // 3. Collision check and grounding resolution

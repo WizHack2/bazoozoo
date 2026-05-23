@@ -53,10 +53,10 @@ impl Projectile {
     pub fn check_collisions(&mut self, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) {
         if self.is_exploding {
             // Phase d'explosion : infliger les dégâts de zone
-            for joueur in joueurs {
+            for joueur in joueurs.iter_mut() {
                 if self.hitbox.overlaps_rect(&joueur.hitbox) {
                     if !self.players_already_damaged.contains(&joueur.id) && joueur.id != self.owner_id { 
-                        self.players_already_damaged.push(joueur.id); // On l'ajoute
+                        self.players_already_damaged.push(joueur.id);
                         joueur.take_damage(self.degats);
                     }
                 }
@@ -164,12 +164,9 @@ impl ExplosionParticleSystem {
         let smoke_count = gen_range(20, 35);
         for _ in 0..smoke_count {
             let angle = gen_range(0.0, 2.0 * PI);
-            // Smoke expands slowly and drifts upwards
-            let speed = gen_range(4.0, 15.0);
-            let velocity = Vec2::new(
-                angle.cos() * speed,
-                angle.sin() * speed - gen_range(10.0, 18.0) // upward buoyancy drift
-            );
+            // Spawn smoke in a full 360-degree radial expansion
+            let speed = gen_range(12.0, 26.0);
+            let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
 
             // Soft ash-gray and translucent white-smoke colors
             let gray = gen_range(0.55, 0.8);

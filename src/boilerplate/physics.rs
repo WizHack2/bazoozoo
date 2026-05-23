@@ -69,6 +69,23 @@ impl Physics {
         self.velocity.y = new_velocity;
     }
 
+    /// Ajoute une impulsion externe à la vélocité actuelle (utilisé par le rocket jump)
+    pub fn add_velocity(&mut self, impulse: Vec2) {
+        self.velocity += impulse;
+    }
+
+    /// Ajoute uniquement un boost vertical (pratique pour garantir la hauteur du rocket jump)
+    #[allow(dead_code)]
+    pub fn add_velocity_y(&mut self, added_velocity: f32) {
+        self.velocity.y += added_velocity;
+    }
+
+    /// Retourne le vecteur de vélocité actuel (debug / réseau)
+    #[allow(dead_code)]
+    pub fn get_velocity_vec(&self) -> Vec2 {
+        self.velocity
+    }
+
     #[allow(dead_code)]
     pub fn set_gravity(&mut self, new_gravity: f32) {
         self.gravity_force = new_gravity;
