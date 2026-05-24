@@ -41,7 +41,12 @@ JSON + PNG pairs in `assets/`. Map files define wall hitboxes. Existing: `map1.j
 
 ## Controls
 
-Key bindings in `README.md`. Notable debug keys: `F3` toggles hitbox overlay, `F4` toggles training mode.
+Key bindings in `README.md`. AZERTY/QWERTY layout selectable in menu (`src/keybindings.rs`).
+Notable debug keys: `F3` toggles hitbox overlay, `F4` toggles training mode.
+
+## Task tracking
+
+See `TASKS.md` for backlog and todo.
 
 ## Tests
 

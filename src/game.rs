@@ -7,6 +7,7 @@ use crate::player::Player;
 use crate::Assets;
 use crate::projectile::{Projectile, ExplosionParticleSystem};
 use crate::boilerplate::network::{PlayerState, NetworkManager, GameMessage};
+use crate::keybindings::{KeyBindings, Layout};
 
 pub const VIRTUAL_HEIGHT: f32 = 100.0;
 
@@ -191,6 +192,8 @@ pub struct Game {
     pub targets: Vec<Target>,
     pub camera_center: Vec2,
     pub join_notification_timer: f32,
+    pub layout: Layout,
+    pub keybindings: KeyBindings,
 }
 
 impl Game {
@@ -208,8 +211,9 @@ impl Game {
         ))
     }
 
-    pub fn new(assets: &Assets, is_host1: bool, pseudo: String, character_id: u8) -> Self {
+    pub fn new(assets: &Assets, is_host1: bool, pseudo: String, character_id: u8, layout: Layout) -> Self {
         set_fullscreen(true);
+        let kb = KeyBindings::from_layout(layout);
         let player_textures = vec![
             assets.player.clone(),
             assets.fox.clone(),
@@ -272,6 +276,8 @@ impl Game {
             targets: Vec::new(),
             camera_center: vec2(20.0, 20.0),
             join_notification_timer: 0.0,
+            layout,
+            keybindings: kb,
         }
     }
 
@@ -563,7 +569,7 @@ impl Game {
             other.particles.update(dt);
         }
         self.player.update(&camera, &self.wallmap, &mut self.other_players, self.is_host,
-            &self.sound_shoot, &self.sound_jump, &self.sound_land, &self.sound_reload);
+            &self.sound_shoot, &self.sound_jump, &self.sound_land, &self.sound_reload, &self.keybindings);
         self.explosion_particles.update(dt, &self.wallmap);
 
         // --- LOGIQUE MODE ENTRAÎNEMENT ---
@@ -910,7 +916,11 @@ impl Game {
             draw_text(&format!("MODE ENTRAÎNEMENT ACTIF | Difficulté: {} | Score: {}", diff_str, self.training_score), 10.0, 55.0, font_size, Color::new(0.8, 0.4, 1.0, 1.0));
             draw_text("Changer Difficulté: [1] Fixe | [2] Normal | [3] Extrême", 10.0, 80.0, font_size, Color::new(0.7, 0.6, 0.9, 1.0));
         } else {
-            draw_text("[Clic gauche] Tirer a la souris | Rockets : [T] haut [G] bas [F] gauche [H] droite | Le recul propulse !", 10.0, 55.0, font_size, Color::new(1.0, 0.8, 0.2, 1.0));
+            let move_keys = match self.layout {
+                Layout::Azerty => "ZQSD",
+                Layout::Qwerty => "WASD",
+            };
+            draw_text(&format!("[Clic gauche] Tirer | {}/Fleches : Deplacement | Rockets : [T]^ [G]v [F]< [H]> | Le recul propulse !", move_keys), 10.0, 55.0, font_size, Color::new(1.0, 0.8, 0.2, 1.0));
             if self.is_hollow_map {
                 draw_text("Carte active : Hollow Knight (Pixel Art)", 10.0, 80.0, font_size, SKYBLUE);
             } else {

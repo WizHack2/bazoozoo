@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use crate::Assets;
+use crate::keybindings::Layout;
 
 // --- DÉTECTION IP LOCALE ROBUSTE (FONCTIONNE HORSLIGNE SOUS LINUX) ---
 pub fn get_local_ips() -> Vec<String> {
@@ -176,6 +177,7 @@ pub struct MenuState {
     pub scanner: NetworkScanner,
     pub active_input: u8, // 0: Pseudo, 1: Room, 2: Server IP
     cursor_timer: f32,
+    pub layout: Layout,
 }
 
 impl MenuState {
@@ -199,6 +201,7 @@ impl MenuState {
             scanner,
             active_input: 0,
             cursor_timer: 0.0,
+            layout: Layout::Azerty,
         }
     }
 
@@ -357,8 +360,33 @@ impl MenuState {
         draw_rectangle_lines(client_btn_x, client_btn_y, btn_w, btn_h, 2.0, if self.role == MenuRole::Client { SKYBLUE } else { Color::new(0.15, 0.15, 0.2, 1.0) });
         draw_text("REJOINDRE (CLIENT)", client_btn_x + 10.0, client_btn_y + 22.0, 15.0, if self.role == MenuRole::Client { WHITE } else { GRAY });
 
-        // C. ZONE DYNAMIQUE RÉSEAU (HÔTE vs CLIENT)
-        let net_y = host_btn_y + 60.0;
+        // C. LAYOUT CLAVIER (AZERTY / QWERTY)
+        let clavier_y = host_btn_y + 44.0;
+        draw_text("DISPOSITION CLAVIER :", col1_x, clavier_y, 16.0, Color::new(0.8, 0.8, 0.9, 1.0));
+        let layout_btn_y = clavier_y + 8.0;
+        let layout_btn_w = 90.0;
+        let layout_btn_h = 26.0;
+
+        let azerty_x = col1_x;
+        let azerty_hover = mouse_position().0 >= azerty_x && mouse_position().0 <= azerty_x + layout_btn_w && mouse_position().1 >= layout_btn_y && mouse_position().1 <= layout_btn_y + layout_btn_h;
+        if azerty_hover && is_mouse_button_pressed(MouseButton::Left) {
+            self.layout = Layout::Azerty;
+        }
+        draw_rectangle(azerty_x, layout_btn_y, layout_btn_w, layout_btn_h, if self.layout == Layout::Azerty { Color::new(0.2, 0.5, 0.2, 0.7) } else { Color::new(0.05, 0.05, 0.08, 1.0) });
+        draw_rectangle_lines(azerty_x, layout_btn_y, layout_btn_w, layout_btn_h, 2.0, if self.layout == Layout::Azerty { GREEN } else { Color::new(0.15, 0.15, 0.2, 1.0) });
+        draw_text("AZERTY", azerty_x + 16.0, layout_btn_y + 17.0, 14.0, if self.layout == Layout::Azerty { WHITE } else { GRAY });
+
+        let qwerty_x = col1_x + 100.0;
+        let qwerty_hover = mouse_position().0 >= qwerty_x && mouse_position().0 <= qwerty_x + layout_btn_w && mouse_position().1 >= layout_btn_y && mouse_position().1 <= layout_btn_y + layout_btn_h;
+        if qwerty_hover && is_mouse_button_pressed(MouseButton::Left) {
+            self.layout = Layout::Qwerty;
+        }
+        draw_rectangle(qwerty_x, layout_btn_y, layout_btn_w, layout_btn_h, if self.layout == Layout::Qwerty { Color::new(0.2, 0.4, 0.6, 0.7) } else { Color::new(0.05, 0.05, 0.08, 1.0) });
+        draw_rectangle_lines(qwerty_x, layout_btn_y, layout_btn_w, layout_btn_h, 2.0, if self.layout == Layout::Qwerty { SKYBLUE } else { Color::new(0.15, 0.15, 0.2, 1.0) });
+        draw_text("QWERTY", qwerty_x + 12.0, layout_btn_y + 17.0, 14.0, if self.layout == Layout::Qwerty { WHITE } else { GRAY });
+
+        // D. ZONE DYNAMIQUE RÉSEAU (HÔTE vs CLIENT)
+        let net_y = layout_btn_y + 50.0;
         if self.role == MenuRole::Host {
             draw_text("NOM DE LA ROOM :", col1_x, net_y, 18.0, Color::new(0.8, 0.8, 0.9, 1.0));
             let room_box_y = net_y + 8.0;

@@ -3,6 +3,7 @@ use macroquad::audio::{Sound, play_sound_once};
 use crate::projectile::Projectile;
 use crate::boilerplate::animation::Animation;
 use crate::boilerplate::physics::Physics;
+use crate::keybindings::KeyBindings;
 use crate::game::VIRTUAL_HEIGHT;
 
 pub struct Particle {
@@ -245,20 +246,20 @@ impl Player {
         }
     }
 
-    pub fn handle_input(&mut self, dt: f32, wallmap: &Vec<Rect>, sound_shoot: &Sound, sound_jump: &Sound, sound_reload: &Sound) {
-        // --- MOUVEMENTS ZQSD ---
-        if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) { self.hitbox.x += self.speed * dt; }
+    pub fn handle_input(&mut self, dt: f32, wallmap: &Vec<Rect>, sound_shoot: &Sound, sound_jump: &Sound, sound_reload: &Sound, kb: &KeyBindings) {
+        // --- MOUVEMENTS ---
+        if is_key_down(KeyCode::Right) || is_key_down(kb.move_right) { self.hitbox.x += self.speed * dt; }
         if wallmap.iter().any(|wall| self.hitbox.overlaps(wall)){
              self.hitbox.x -= self.speed * dt; 
         }
 
-        if is_key_down(KeyCode::Left) || is_key_down(KeyCode::Q) { self.hitbox.x -= self.speed * dt; }
+        if is_key_down(KeyCode::Left) || is_key_down(kb.move_left) { self.hitbox.x -= self.speed * dt; }
         if wallmap.iter().any(|wall| self.hitbox.overlaps(wall)){
              self.hitbox.x += self.speed * dt; 
         }
-        //if is_key_down(KeyCode::Up) || is_key_down(KeyCode::Z) { self.hitbox.y -= self.speed * dt; }
+
         if self.jump_available>0{
-            if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Space){
+            if is_key_pressed(kb.jump[0]) || is_key_pressed(kb.jump[1]) || is_key_pressed(kb.jump[2]){
                 self.physics.jump(100.);
                 self.jump_available -= 1;
                 play_sound_once(sound_jump);
@@ -266,34 +267,34 @@ impl Player {
         }
 
         // --- RELOAD MANUEL ---
-        if is_key_pressed(KeyCode::E) && !self.is_reloading && self.current_ammo < self.max_ammo {
+        if is_key_pressed(kb.reload) && !self.is_reloading && self.current_ammo < self.max_ammo {
             self.is_reloading = true;
             self.reload_timer = 2.0;
             play_sound_once(sound_reload);
         }
 
-        // --- TIR CLAVIER : T/G/F/H/R/Y/V/N = une touche par direction (AZERTY) ---
+        // --- TIR CLAVIER : touches directionnelles (via KeyBindings) ---
         if self.rocket_cooldown > 0.0 {
             self.rocket_cooldown -= dt;
         }
         if self.rocket_cooldown <= 0.0 && !self.is_reloading {
             let mut shot_dir = None;
-            if is_key_pressed(KeyCode::T) {
-                shot_dir = Some(vec2(0.0, -1.0)); // Haut
-            } else if is_key_pressed(KeyCode::G) {
-                shot_dir = Some(vec2(0.0, 1.0));  // Bas
-            } else if is_key_pressed(KeyCode::F) {
-                shot_dir = Some(vec2(-1.0, 0.0)); // Gauche
-            } else if is_key_pressed(KeyCode::H) {
-                shot_dir = Some(vec2(1.0, 0.0));  // Droite
-            } else if is_key_pressed(KeyCode::R) {
-                shot_dir = Some(vec2(-1.0, -1.0).normalize()); // Haut-Gauche
-            } else if is_key_pressed(KeyCode::Y) {
-                shot_dir = Some(vec2(1.0, -1.0).normalize());  // Haut-Droite
-            } else if is_key_pressed(KeyCode::V) {
-                shot_dir = Some(vec2(-1.0, 1.0).normalize());  // Bas-Gauche
-            } else if is_key_pressed(KeyCode::N) {
-                shot_dir = Some(vec2(1.0, 1.0).normalize());   // Bas-Droite
+            if is_key_pressed(kb.rocket_up) {
+                shot_dir = Some(vec2(0.0, -1.0));
+            } else if is_key_pressed(kb.rocket_down) {
+                shot_dir = Some(vec2(0.0, 1.0));
+            } else if is_key_pressed(kb.rocket_left) {
+                shot_dir = Some(vec2(-1.0, 0.0));
+            } else if is_key_pressed(kb.rocket_right) {
+                shot_dir = Some(vec2(1.0, 0.0));
+            } else if is_key_pressed(kb.rocket_up_left) {
+                shot_dir = Some(vec2(-1.0, -1.0).normalize());
+            } else if is_key_pressed(kb.rocket_up_right) {
+                shot_dir = Some(vec2(1.0, -1.0).normalize());
+            } else if is_key_pressed(kb.rocket_down_left) {
+                shot_dir = Some(vec2(-1.0, 1.0).normalize());
+            } else if is_key_pressed(kb.rocket_down_right) {
+                shot_dir = Some(vec2(1.0, 1.0).normalize());
             }
 
             if let Some(dir) = shot_dir {
@@ -331,7 +332,7 @@ impl Player {
 
 
     pub fn update(&mut self, camera: &Camera2D, wallmap: &Vec<Rect>, _joueurs: &mut Vec<Player>, is_host: bool,
-        sound_shoot: &Sound, sound_jump: &Sound, sound_land: &Sound, sound_reload: &Sound) {
+        sound_shoot: &Sound, sound_jump: &Sound, sound_land: &Sound, sound_reload: &Sound, kb: &KeyBindings) {
         if self.pv <= 0.0 {
             if self.death_timer <= 0.0 {
                 self.death_timer = 1.0;
@@ -420,7 +421,7 @@ impl Player {
         self.was_grounded = self.is_grounded;
 
         // 2. Perform standard inputs
-        self.handle_input(dt, wallmap, sound_shoot, sound_jump, sound_reload);
+        self.handle_input(dt, wallmap, sound_shoot, sound_jump, sound_reload, kb);
 
         // --- GRAVITE ---
         let old_y = self.hitbox.y;
@@ -514,8 +515,8 @@ impl Player {
 
         // 5. Trigger Running Dust Trails
         if self.is_grounded {
-            let right_active = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
-            let left_active = is_key_down(KeyCode::Left) || is_key_down(KeyCode::Q);
+            let right_active = is_key_down(KeyCode::Right) || is_key_down(kb.move_right);
+            let left_active = is_key_down(KeyCode::Left) || is_key_down(kb.move_left);
             let is_moving = right_active ^ left_active; // XOR ensures opposite inputs cancel out
 
             if is_moving {

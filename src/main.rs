@@ -7,6 +7,7 @@ mod assets;
 mod projectile;
 mod map_loading;
 mod menu;
+mod keybindings;
 
 use game::Game;
 use assets::Assets;
@@ -45,7 +46,7 @@ async fn main() {
 
     // --- LE MENU EST TERMINÉ, INITIALISATION DE LA PARTIE ---
     let is_host = menu_state.role == menu::MenuRole::Host;
-    let mut game = Game::new(&assets, is_host, menu_state.pseudo.clone(), menu_state.character_id);
+    let mut game = Game::new(&assets, is_host, menu_state.pseudo.clone(), menu_state.character_id, menu_state.layout);
 
     // Connexion réseau à la salle choisie
     // Pour l'hôte, on se connecte toujours sur le serveur matchbox local (127.0.0.1)
