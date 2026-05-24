@@ -5,6 +5,7 @@ pub struct Assets {
     pub hollow_background: Texture2D,
     pub platform_tile: Texture2D,
     pub player: Texture2D,
+    pub fox: Texture2D,
     // Ajoute des futurs boss ici
 }
 
@@ -21,11 +22,16 @@ impl Assets {
 
         let player = load_texture("assets/Asterion.png").await.unwrap();
         player.set_filter(FilterMode::Nearest);
+
+        let fox = load_texture("assets/fox.png").await.unwrap();
+        fox.set_filter(FilterMode::Nearest);
+
         Self {
             background,
             hollow_background,
             platform_tile,
             player,
+            fox,
         }
     }
 }

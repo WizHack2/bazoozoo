@@ -34,6 +34,128 @@ pub struct NetworkGameState {
     pub players: Vec<NetworkPlayer>,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum TrainingDifficulty {
+    Fixed,
+    Normal,
+    Extreme,
+}
+
+pub struct Target {
+    pub hitbox: Rect,
+    pub speed: Vec2,
+    pub is_destroyed: bool,
+    pub pv: f32,
+    pub hits_received: Vec<Vec2>,
+}
+
+impl Target {
+    pub fn spawn_random(virtual_width: f32, difficulty: TrainingDifficulty, wallmap: &Vec<Rect>) -> Self {
+        use macroquad::rand::gen_range;
+        let w = 10.0;
+        let h = 10.0;
+        
+        let mut x = 20.0;
+        let mut y = 20.0;
+        
+        // Try up to 200 times to find a position that does not overlap with any wall
+        for _ in 0..200 {
+            let px = gen_range(10.0, virtual_width - 15.0);
+            let py = gen_range(10.0, 80.0);
+            let test_rect = Rect::new(px, py, w, h);
+            
+            let overlaps_wall = wallmap.iter().any(|wall| test_rect.overlaps(wall));
+            if !overlaps_wall {
+                x = px;
+                y = py;
+                break;
+            }
+        }
+        
+        let speed = match difficulty {
+            TrainingDifficulty::Fixed => Vec2::ZERO,
+            TrainingDifficulty::Normal => {
+                let angle = gen_range(0.0, 2.0 * std::f32::consts::PI);
+                let speed_val = gen_range(12.0, 22.0);
+                Vec2::new(angle.cos() * speed_val, angle.sin() * speed_val)
+            }
+            TrainingDifficulty::Extreme => {
+                let angle = gen_range(0.0, 2.0 * std::f32::consts::PI);
+                let speed_val = gen_range(40.0, 60.0);
+                Vec2::new(angle.cos() * speed_val, angle.sin() * speed_val)
+            }
+        };
+
+        Self {
+            hitbox: Rect::new(x, y, w, h),
+            speed,
+            is_destroyed: false,
+            pv: 15.0,
+            hits_received: Vec::new(),
+        }
+    }
+
+    pub fn update(&mut self, dt: f32, virtual_width: f32, wallmap: &Vec<Rect>) {
+        if self.speed.length() < 0.01 {
+            return;
+        }
+
+        self.hitbox.x += self.speed.x * dt;
+        self.hitbox.y += self.speed.y * dt;
+
+        // Bounce off screen boundaries
+        if self.hitbox.x < 0.0 {
+            self.hitbox.x = 0.0;
+            self.speed.x = -self.speed.x;
+        } else if self.hitbox.x > virtual_width - self.hitbox.w {
+            self.hitbox.x = virtual_width - self.hitbox.w;
+            self.speed.x = -self.speed.x;
+        }
+
+        if self.hitbox.y < 0.0 {
+            self.hitbox.y = 0.0;
+            self.speed.y = -self.speed.y;
+        } else if self.hitbox.y > 100.0 - self.hitbox.h {
+            self.hitbox.y = 100.0 - self.hitbox.h;
+            self.speed.y = -self.speed.y;
+        }
+
+        // Bounce off platforms
+        for wall in wallmap {
+            if self.hitbox.overlaps(wall) {
+                self.speed = -self.speed;
+                self.hitbox.x += self.speed.x * dt;
+                self.hitbox.y += self.speed.y * dt;
+                break;
+            }
+        }
+    }
+
+    pub fn draw_healthbar(&self) {
+        let width: f32 = 6.0;
+        let bar_x = self.hitbox.x + self.hitbox.w / 2.0 - width / 2.0;
+        let bar_y = self.hitbox.y - 1.5;
+        draw_rectangle(bar_x, bar_y, width * self.pv / 15.0, 0.3, GREEN);
+        draw_rectangle(bar_x + width * self.pv / 15.0, bar_y, width * (15.0 - self.pv) / 15.0, 0.3, RED);
+    }
+
+    pub fn draw(&self, texture: &Texture2D) {
+        let look_right = self.speed.x >= 0.0;
+        draw_texture_ex(
+            texture,
+            self.hitbox.x,
+            self.hitbox.y,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(self.hitbox.w, self.hitbox.h)),
+                flip_x: !look_right,
+                ..Default::default()
+            }
+        );
+        self.draw_healthbar();
+    }
+}
+
 pub fn get_camera() -> Camera2D {
     let aspect_ratio = screen_width() / screen_height();
     let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
@@ -56,6 +178,13 @@ pub struct Game {
     pub pending_mouse_x: f32,
     pub pending_mouse_y: f32,
     pub explosion_particles: ExplosionParticleSystem,
+    pub fox_texture: Texture2D,
+
+    // --- TRAINING MODE ---
+    pub is_training_mode: bool,
+    pub training_difficulty: TrainingDifficulty,
+    pub training_score: i32,
+    pub targets: Vec<Target>,
 }
 
 impl Game {
@@ -77,6 +206,12 @@ impl Game {
             pending_mouse_x: 0.0,
             pending_mouse_y: 0.0,
             explosion_particles: ExplosionParticleSystem::new(),
+            fox_texture: assets.fox.clone(),
+
+            is_training_mode: false,
+            training_difficulty: TrainingDifficulty::Normal,
+            training_score: 0,
+            targets: Vec::new(),
         }
     }
 
@@ -127,6 +262,46 @@ impl Game {
                 self.wallmap = charger_hitboxes("assets/hollow_map.json".to_string());
             } else {
                 self.wallmap = charger_hitboxes("assets/map2.json".to_string());
+            }
+        }
+
+        // --- TOGGLE TRAINING MODE ---
+        if is_key_pressed(KeyCode::F4) {
+            self.is_training_mode = !self.is_training_mode;
+            if self.is_training_mode {
+                self.training_score = 0;
+                self.targets.clear();
+                let aspect_ratio = screen_width() / screen_height();
+                let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
+                for _ in 0..3 {
+                    self.targets.push(Target::spawn_random(virtual_width, self.training_difficulty, &self.wallmap));
+                }
+            } else {
+                self.targets.clear();
+            }
+        }
+
+        if self.is_training_mode {
+            let mut diff_changed = false;
+            if is_key_pressed(KeyCode::Key1) {
+                self.training_difficulty = TrainingDifficulty::Fixed;
+                diff_changed = true;
+            } else if is_key_pressed(KeyCode::Key2) {
+                self.training_difficulty = TrainingDifficulty::Normal;
+                diff_changed = true;
+            } else if is_key_pressed(KeyCode::Key3) {
+                self.training_difficulty = TrainingDifficulty::Extreme;
+                diff_changed = true;
+            }
+
+            if diff_changed {
+                self.training_score = 0;
+                self.targets.clear();
+                let aspect_ratio = screen_width() / screen_height();
+                let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
+                for _ in 0..3 {
+                    self.targets.push(Target::spawn_random(virtual_width, self.training_difficulty, &self.wallmap));
+                }
             }
         }
 
@@ -222,6 +397,79 @@ impl Game {
         }
         self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
         self.explosion_particles.update(dt, &self.wallmap);
+
+        // --- LOGIQUE MODE ENTRAÎNEMENT ---
+        if self.is_training_mode {
+            let aspect_ratio = screen_width() / screen_height();
+            let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
+
+            // 1. Update targets positions
+            for target in &mut self.targets {
+                target.update(dt, virtual_width, &self.wallmap);
+            }
+
+            // 2. Collision with projectiles
+            for target in &mut self.targets {
+                if target.is_destroyed {
+                    continue;
+                }
+
+                // Check direct impacts (flying projectiles hit target)
+                for proj in &mut self.player.projectiles {
+                    if !proj.is_exploding && proj.hitbox.overlaps_rect(&target.hitbox) {
+                        proj.explode();
+                    }
+                }
+
+                for other in &mut self.other_players {
+                    for proj in &mut other.projectiles {
+                        if !proj.is_exploding && proj.hitbox.overlaps_rect(&target.hitbox) {
+                            proj.explode();
+                        }
+                    }
+                }
+
+                // Check explosion hits
+                for proj in &self.player.projectiles {
+                    if proj.is_exploding && proj.hitbox.overlaps_rect(&target.hitbox) {
+                        let proj_center = vec2(proj.hitbox.x, proj.hitbox.y);
+                        if !target.hits_received.contains(&proj_center) {
+                            target.hits_received.push(proj_center);
+                            target.pv -= proj.degats;
+                            if target.pv <= 0.0 {
+                                target.is_destroyed = true;
+                                self.training_score += 1;
+                                self.explosion_particles.spawn_purple_burst(vec2(target.hitbox.x + target.hitbox.w / 2.0, target.hitbox.y + target.hitbox.h / 2.0));
+                            }
+                        }
+                    }
+                }
+
+                for other in &self.other_players {
+                    for proj in &other.projectiles {
+                        if proj.is_exploding && proj.hitbox.overlaps_rect(&target.hitbox) {
+                            let proj_center = vec2(proj.hitbox.x, proj.hitbox.y);
+                            if !target.hits_received.contains(&proj_center) {
+                                target.hits_received.push(proj_center);
+                                target.pv -= proj.degats;
+                                if target.pv <= 0.0 {
+                                    target.is_destroyed = true;
+                                    self.training_score += 1;
+                                    self.explosion_particles.spawn_purple_burst(vec2(target.hitbox.x + target.hitbox.w / 2.0, target.hitbox.y + target.hitbox.h / 2.0));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Respawn destroyed targets
+            let current_diff = self.training_difficulty;
+            self.targets.retain(|t| !t.is_destroyed);
+            while self.targets.len() < 3 {
+                self.targets.push(Target::spawn_random(virtual_width, current_diff, &self.wallmap));
+            }
+        }
 
         let time_now = macroquad::time::get_time();
         let network_tick_rate = 1.0 / 120.0;
@@ -354,6 +602,12 @@ impl Game {
                 draw_rectangle(wall.x, wall.y, wall.w, wall.h, Color::new(0.0, 1.0, 0.0, 0.35)); // Vert translucide pour un debug propre !
             }
         }
+        if self.is_training_mode {
+            for target in &self.targets {
+                target.draw(&self.fox_texture);
+            }
+        }
+
         // --- DESSIN DES JOUEURS ---
         self.player.draw();
         for player in &self.other_players {
@@ -368,12 +622,23 @@ impl Game {
         // Draw HUD help text
         let font_size = 20.0;
         let text_color = LIGHTGRAY;
-        draw_text("Pressez [M] pour changer de carte | [F3] pour afficher/masquer les hitboxes de debug", 10.0, 30.0, font_size, text_color);
-        draw_text("[Clic gauche] Tirer a la souris | Rockets : [T] haut [G] bas [F] gauche [H] droite | Le recul propulse !", 10.0, 55.0, font_size, Color::new(1.0, 0.8, 0.2, 1.0));
-        if self.is_hollow_map {
-            draw_text("Carte active : Hollow Knight (Pixel Art)", 10.0, 80.0, font_size, SKYBLUE);
+        draw_text("Pressez [M] pour changer de carte | [F3] pour hitboxes | [F4] pour Mode Entraînement", 10.0, 30.0, font_size, text_color);
+        
+        if self.is_training_mode {
+            let diff_str = match self.training_difficulty {
+                TrainingDifficulty::Fixed => "Fixe",
+                TrainingDifficulty::Normal => "Normal",
+                TrainingDifficulty::Extreme => "Extrême",
+            };
+            draw_text(&format!("MODE ENTRAÎNEMENT ACTIF | Difficulté: {} | Score: {}", diff_str, self.training_score), 10.0, 55.0, font_size, Color::new(0.8, 0.4, 1.0, 1.0));
+            draw_text("Changer Difficulté: [1] Fixe | [2] Normal | [3] Extrême", 10.0, 80.0, font_size, Color::new(0.7, 0.6, 0.9, 1.0));
         } else {
-            draw_text("Carte active : Origine", 10.0, 80.0, font_size, ORANGE);
+            draw_text("[Clic gauche] Tirer a la souris | Rockets : [T] haut [G] bas [F] gauche [H] droite | Le recul propulse !", 10.0, 55.0, font_size, Color::new(1.0, 0.8, 0.2, 1.0));
+            if self.is_hollow_map {
+                draw_text("Carte active : Hollow Knight (Pixel Art)", 10.0, 80.0, font_size, SKYBLUE);
+            } else {
+                draw_text("Carte active : Origine", 10.0, 80.0, font_size, ORANGE);
+            }
         }
     }
 

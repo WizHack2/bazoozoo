@@ -82,7 +82,7 @@ impl Projectile {
         }
     }
 
-    fn explode(&mut self) {
+    pub fn explode(&mut self) {
         if !self.is_exploding {
             self.is_exploding = true;
             self.speed = 0.0; // Le projectile s'arrête
@@ -184,6 +184,36 @@ impl ExplosionParticleSystem {
                 max_lifetime: lifetime,
                 trail: Vec::new(),
                 is_smoke: true,
+            });
+        }
+    }
+
+    pub fn spawn_purple_burst(&mut self, pos: Vec2) {
+        use macroquad::rand::gen_range;
+        use std::f32::consts::PI;
+
+        let count = gen_range(30, 50);
+        for _ in 0..count {
+            let angle = gen_range(0.0, 2.0 * PI);
+            let speed = gen_range(15.0, 45.0);
+            let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
+            let color = match gen_range(0, 3) {
+                0 => Color::new(0.6, 0.0, 0.9, 1.0), // Deep Purple
+                1 => Color::new(0.8, 0.2, 1.0, 1.0), // Bright Violet
+                _ => Color::new(0.9, 0.6, 1.0, 1.0), // Light Lilac
+            };
+            let initial_size = gen_range(0.15, 0.4);
+            let lifetime = gen_range(0.8, 1.8);
+
+            self.particles.push(ExplosionParticle {
+                position: pos,
+                velocity,
+                color,
+                initial_size,
+                lifetime,
+                max_lifetime: lifetime,
+                trail: Vec::new(),
+                is_smoke: false,
             });
         }
     }
