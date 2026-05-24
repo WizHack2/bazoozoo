@@ -156,12 +156,6 @@ impl Target {
     }
 }
 
-pub fn get_camera() -> Camera2D {
-    let aspect_ratio = screen_width() / screen_height();
-    let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
-    Camera2D::from_display_rect(Rect::new(0.0, VIRTUAL_HEIGHT, virtual_width, -VIRTUAL_HEIGHT))
-}
-
 pub struct Game {
     pub background: Texture2D,
     pub hollow_background: Texture2D,
@@ -185,9 +179,24 @@ pub struct Game {
     pub training_difficulty: TrainingDifficulty,
     pub training_score: i32,
     pub targets: Vec<Target>,
+    pub camera_center: Vec2,
 }
 
 impl Game {
+    pub fn get_game_camera(&self) -> Camera2D {
+        let aspect_ratio = screen_width() / screen_height();
+        
+        let cam_h = 60.0;
+        let cam_w = cam_h * aspect_ratio;
+        
+        Camera2D::from_display_rect(Rect::new(
+            self.camera_center.x - cam_w / 2.0,
+            self.camera_center.y + cam_h / 2.0,
+            cam_w,
+            -cam_h,
+        ))
+    }
+
     pub fn new(assets: &Assets, is_host1: bool) -> Self {
         set_fullscreen(true);
         Self {
@@ -212,6 +221,7 @@ impl Game {
             training_difficulty: TrainingDifficulty::Normal,
             training_score: 0,
             targets: Vec::new(),
+            camera_center: vec2(20.0, 20.0),
         }
     }
 
@@ -305,7 +315,14 @@ impl Game {
             }
         }
 
-        let camera = get_camera();
+        let dt = get_frame_time().clamp(0.001, 0.05);
+        let player_center = vec2(
+            self.player.hitbox.x + self.player.hitbox.w / 2.0,
+            self.player.hitbox.y + self.player.hitbox.h / 2.0,
+        );
+        self.camera_center = self.camera_center.lerp(player_center, 5.0 * dt);
+
+        let camera = self.get_game_camera();
 
         if is_mouse_button_pressed(MouseButton::Left) && !self.player.is_reloading {
             self.pending_shot = true;
@@ -351,7 +368,6 @@ impl Game {
         
 
 
-        let dt = get_frame_time().clamp(0.001, 0.05);
         if self.is_host{
             // 1. TOI tu tires sur les autres
             for proj in &mut self.player.projectiles {
@@ -502,7 +518,7 @@ impl Game {
         // --- CONFIGURATION CAMERA ---
         let aspect_ratio = screen_width() / screen_height();
         let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
-        let camera = Camera2D::from_display_rect(Rect::new(0.0, VIRTUAL_HEIGHT, virtual_width, -VIRTUAL_HEIGHT)); // Le 0 de la caméra est placé en bas a droite de l'écran pour qu'on garde une logiqe de y diminue quand on monte.
+        let camera = self.get_game_camera();
 
         // --- DESSIN DU MONDE (Avec la caméra) ---
         set_camera(&camera);
@@ -510,7 +526,11 @@ impl Game {
 
         // --- DESSIN DU BACKGROUND ---
         let bg_tex = if self.is_hollow_map { &self.hollow_background } else { &self.background };
-        draw_texture_ex(bg_tex, 0., 0., WHITE, DrawTextureParams { dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)), ..Default::default() });
+        let dev_x = self.camera_center.x - virtual_width / 2.0;
+        let dev_y = self.camera_center.y - VIRTUAL_HEIGHT / 2.0;
+        let bg_x = dev_x * 0.4;
+        let bg_y = dev_y * 0.4;
+        draw_texture_ex(bg_tex, bg_x, bg_y, WHITE, DrawTextureParams { dest_size: Some(vec2(virtual_width, VIRTUAL_HEIGHT)), ..Default::default() });
         
         // --- DESSIN DES MURS (PLATES-FORMES TEXTURÉES AVEC 3-SLICING ET TILING PARFAIT) ---
         for wall in &self.wallmap {

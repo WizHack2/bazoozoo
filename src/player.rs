@@ -134,7 +134,7 @@ impl Player {
         Self {
             id: macroquad::rand::rand() as i32,
             speed: 50.0,
-            hitbox: Rect::new(0.0, 0.0, 10.0, 10.0),
+            hitbox: Rect::new(0.0, 0.0, 5.0, 5.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
             projectiles: Vec::new(),
             pv: 100.0,
@@ -605,7 +605,7 @@ impl Player {
         self.particles.draw();
         
         let look_right = self.bazooka_dir.x >= 0.0;
-        self.animation.draw_current_frame(self.hitbox.x, self.hitbox.y, 10., 10., look_right);
+        self.animation.draw_current_frame(self.hitbox.x, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
         
         self.draw_healthbar();
         self.draw_ammobar();
@@ -620,11 +620,11 @@ impl Player {
         
         draw_texture_ex(
             &self.bazooka_texture,
-            bazooka_pos.x - 1.5,
-            bazooka_pos.y - 1.5,
+            bazooka_pos.x - 0.75,
+            bazooka_pos.y - 0.75,
             WHITE,
             DrawTextureParams {
-                dest_size: Some(vec2(6.0, 3.0)),
+                dest_size: Some(vec2(3.0, 1.5)),
                 pivot: Some(vec2(bazooka_pos.x, bazooka_pos.y)),
                 rotation: angle,
                 ..Default::default()
