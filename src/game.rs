@@ -186,7 +186,7 @@ impl Game {
     pub fn get_game_camera(&self) -> Camera2D {
         let aspect_ratio = screen_width() / screen_height();
         
-        let cam_h = 60.0;
+        let cam_h = 75.0;
         let cam_w = cam_h * aspect_ratio;
         
         Camera2D::from_display_rect(Rect::new(
@@ -324,12 +324,10 @@ impl Game {
 
         let camera = self.get_game_camera();
 
-        if is_mouse_button_pressed(MouseButton::Left) && !self.player.is_reloading {
+        if self.player.a_tire_cette_frame {
             self.pending_shot = true;
-            let mouse_pos = mouse_position();
-            let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
-            self.pending_mouse_x = world_mouse.x;
-            self.pending_mouse_y = world_mouse.y;
+            self.pending_mouse_x = self.player.target_tir_cette_frame.x;
+            self.pending_mouse_y = self.player.target_tir_cette_frame.y;
         }
 
         let messages = network.receive_messages();

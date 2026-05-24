@@ -127,13 +127,15 @@ pub struct Player {
     pub current_ammo: i32,
     pub is_reloading: bool,
     pub reload_timer: f32,
+    pub a_tire_cette_frame: bool,
+    pub target_tir_cette_frame: Vec2,
 }
 
 impl Player {
     pub fn new(spritesheet: Texture2D) -> Self {
         Self {
             id: macroquad::rand::rand() as i32,
-            speed: 50.0,
+            speed: 40.0,
             hitbox: Rect::new(0.0, 0.0, 5.0, 5.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
             projectiles: Vec::new(),
@@ -156,6 +158,8 @@ impl Player {
             current_ammo: 3,
             is_reloading: false,
             reload_timer: 0.0,
+            a_tire_cette_frame: false,
+            target_tir_cette_frame: Vec2::ZERO,
         }
     }
 
@@ -283,6 +287,11 @@ impl Player {
 
             if let Some(dir) = shot_dir {
                 self.tirer_projectile_clavier(dir);
+                let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+                let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+                self.a_tire_cette_frame = true;
+                self.target_tir_cette_frame = vec2(center_x + dir.x * 100.0, center_y + dir.y * 100.0);
+
                 self.current_ammo -= 1;
                 self.bazooka_dir = dir;
                 self.keyboard_dir_timer = 0.5;
@@ -317,6 +326,7 @@ impl Player {
         }
 
         let dt = get_frame_time().clamp(0.001, 0.05);
+        self.a_tire_cette_frame = false;
 
         // --- TIMERS ET DEPLACEMENTS BAZOOKA ---
         if self.keyboard_dir_timer > 0.0 {
@@ -397,6 +407,9 @@ impl Player {
 
                 self.current_ammo -= 1;
                 self.recoil_displacement = 2.0;
+
+                self.a_tire_cette_frame = true;
+                self.target_tir_cette_frame = world_mouse;
 
                 if self.current_ammo == 0 {
                     self.is_reloading = true;
