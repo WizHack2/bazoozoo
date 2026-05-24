@@ -19,3 +19,7 @@
 ## Prochaines pistes
 
 - [ ] (à définir)
+
+## Terminé (suite)
+
+- [x] Auto-lancement matchbox_server au choix Host + affichage IP locale

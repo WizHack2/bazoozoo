@@ -7,7 +7,7 @@ cargo run                          # host (needs matchbox_server on :3536)
 cargo run -- --client --ip=127.0.0.1  # connect as client
 ```
 
-Prerequisite for multiplayer: `matchbox_server` running in another terminal (`cargo install matchbox_server && matchbox_server`).
+`matchbox_server` must be installed (`cargo install matchbox_server`). The game auto-launches it when you select **Host**; no separate terminal needed.
 
 ## Rust edition
 

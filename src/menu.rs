@@ -3,6 +3,7 @@ use std::net::{TcpStream, SocketAddr, UdpSocket};
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::process::{Command, Child};
 use crate::Assets;
 use crate::keybindings::Layout;
 
@@ -178,6 +179,10 @@ pub struct MenuState {
     pub active_input: u8, // 0: Pseudo, 1: Room, 2: Server IP
     cursor_timer: f32,
     pub layout: Layout,
+    local_ips: Vec<String>,
+    server_process: Option<Child>,
+    server_error: Option<String>,
+    previous_role: MenuRole,
 }
 
 impl MenuState {
@@ -191,7 +196,7 @@ impl MenuState {
 
         let clean_room = primary_ip.replace('.', "_");
 
-        Self {
+        let mut state = Self {
             pseudo: format!("Hero_{}", macroquad::rand::gen_range(100, 999)),
             character_id: 0,
             role: MenuRole::Host,
@@ -202,12 +207,66 @@ impl MenuState {
             active_input: 0,
             cursor_timer: 0.0,
             layout: Layout::Azerty,
+            local_ips,
+            server_process: None,
+            server_error: None,
+            previous_role: MenuRole::Host,
+        };
+        state.try_start_server();
+        state
+    }
+
+    fn try_start_server(&mut self) {
+        if self.server_process.is_some() {
+            return;
+        }
+
+        // Vérifier si un serveur tourne déjà sur le port 3536
+        let port_busy = "127.0.0.1:3536"
+            .parse::<SocketAddr>()
+            .ok()
+            .and_then(|addr| TcpStream::connect_timeout(&addr, Duration::from_millis(100)).ok())
+            .is_some();
+
+        if port_busy {
+            self.server_error = None; // déjà lancé en externe, parfait
+            return;
+        }
+
+        match Command::new("matchbox_server").spawn() {
+            Ok(child) => {
+                self.server_process = Some(child);
+                self.server_error = None;
+            }
+            Err(e) => {
+                self.server_error = Some(match e.kind() {
+                    std::io::ErrorKind::NotFound =>
+                        "matchbox_server introuvable — installez : cargo install matchbox_server".into(),
+                    _ => format!("Erreur matchbox_server : {e}"),
+                });
+            }
+        }
+    }
+
+    fn stop_server(&mut self) {
+        if let Some(mut child) = self.server_process.take() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 
     pub fn update(&mut self) {
         self.cursor_timer += get_frame_time();
-        
+
+        // --- CHANGEMENT DE RÔLE (gestion serveur) ---
+        if self.role != self.previous_role {
+            match self.role {
+                MenuRole::Host => self.try_start_server(),
+                MenuRole::Client => self.stop_server(),
+            }
+            self.previous_role = self.role;
+        }
+
         // --- CHANGER DE RÔLE ---
         if is_key_pressed(KeyCode::Tab) {
             self.active_input = (self.active_input + 1) % if self.role == MenuRole::Host { 2 } else { 3 };
@@ -388,8 +447,37 @@ impl MenuState {
         // D. ZONE DYNAMIQUE RÉSEAU (HÔTE vs CLIENT)
         let net_y = layout_btn_y + 50.0;
         if self.role == MenuRole::Host {
-            draw_text("NOM DE LA ROOM :", col1_x, net_y, 18.0, Color::new(0.8, 0.8, 0.9, 1.0));
-            let room_box_y = net_y + 8.0;
+            // Affichage IP locale (bien visible pour partage)
+            let ip_display = self.local_ips.first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
+            draw_text("VOTRE IP :", col1_x, net_y, 18.0, Color::new(0.8, 0.8, 0.9, 1.0));
+            draw_rectangle(col1_x, net_y + 6.0, box_w, 36.0, Color::new(0.01, 0.01, 0.02, 1.0));
+            draw_rectangle_lines(col1_x, net_y + 6.0, box_w, 36.0, 2.0, GREEN);
+            draw_text(&ip_display, col1_x + 10.0, net_y + 28.0, 22.0, Color::new(0.0, 1.0, 0.8, 1.0));
+
+            // Statut du serveur
+            let status_y = net_y + 50.0;
+            match &self.server_error {
+                Some(err) => {
+                    draw_text(&format!("⚠ {}", err), col1_x, status_y, 13.0, RED);
+                    draw_text("Lancez matchbox_server manuellement ou vérifiez l'installation.", col1_x, status_y + 16.0, 12.0, GRAY);
+                }
+                None => {
+                    let running = self.server_process.is_some()
+                        || "127.0.0.1:3536".parse::<SocketAddr>().ok()
+                            .and_then(|a| TcpStream::connect_timeout(&a, Duration::from_millis(50)).ok())
+                            .is_some();
+                    if running {
+                        draw_text("✓ Serveur matchbox actif (port 3536)", col1_x, status_y, 13.0, GREEN);
+                    } else {
+                        draw_text("◌ Démarrage du serveur...", col1_x, status_y, 13.0, ORANGE);
+                    }
+                }
+            }
+
+            // Nom de la room
+            let room_y = status_y + 26.0;
+            draw_text("NOM DE LA ROOM :", col1_x, room_y, 16.0, Color::new(0.8, 0.8, 0.9, 1.0));
+            let room_box_y = room_y + 6.0;
             let room_active = self.active_input == 1;
             draw_rectangle(col1_x, room_box_y, box_w, box_h, Color::new(0.01, 0.01, 0.02, 1.0));
             draw_rectangle_lines(col1_x, room_box_y, box_w, box_h, 2.0, if room_active { GREEN } else { Color::new(0.15, 0.15, 0.2, 1.0) });
@@ -399,9 +487,8 @@ impl MenuState {
                 let caret_x = col1_x + 12.0 + measure_text(&self.room_name, None, 20, 1.0).width;
                 draw_rectangle(caret_x, room_box_y + 8.0, 2.0, 20.0, GREEN);
             }
-            
-            draw_text("La room sera hébergée sur votre serveur local.", col1_x, room_box_y + 55.0, 14.0, ORANGE);
-            draw_text("Partagez votre IP ou le nom de la room avec vos amis.", col1_x, room_box_y + 73.0, 13.0, GRAY);
+
+            draw_text("Donnez votre IP + nom de room à vos coéquipiers.", col1_x, room_box_y + 52.0, 12.0, GRAY);
         } else {
             draw_text("IP DU SERVEUR / MATCHMAKER :", col1_x, net_y, 18.0, Color::new(0.8, 0.8, 0.9, 1.0));
             let ip_box_y = net_y + 8.0;
@@ -567,5 +654,11 @@ impl MenuState {
         let start_font_size = 22.0;
         let text_w = measure_text(start_text, None, start_font_size as u16, 1.0).width;
         draw_text(start_text, arena_x + (arena_w - text_w) / 2.0, arena_y + 32.0, start_font_size, WHITE);
+    }
+}
+
+impl Drop for MenuState {
+    fn drop(&mut self) {
+        self.stop_server();
     }
 }
