@@ -15,6 +15,7 @@ pub struct NetworkProjectile {
     pub y: f32,
     pub r: f32,
     pub is_exploding: bool,
+    pub is_mega: bool,
 }
 
 // On modifie NetworkPlayer pour qu'il ait des poches pleines de missiles
@@ -236,27 +237,36 @@ impl Game {
                 p.hitbox.x = state.x;
                 p.hitbox.y = state.y;
                 
-                // Update aiming direction from souris coordinates
-                let center_x = p.hitbox.x + p.hitbox.w / 2.0;
-                let center_y = p.hitbox.y + p.hitbox.h / 2.0;
-                let to_target = vec2(state.souris_x - center_x, state.souris_y - center_y);
-                if to_target.length() > 0.01 {
-                    p.bazooka_dir = to_target.normalize();
+                // Update aiming direction from souris coordinates if it is not a mega sentinel
+                if state.souris_x < 90000.0 {
+                    let center_x = p.hitbox.x + p.hitbox.w / 2.0;
+                    let center_y = p.hitbox.y + p.hitbox.h / 2.0;
+                    let to_target = vec2(state.souris_x - center_x, state.souris_y - center_y);
+                    if to_target.length() > 0.01 {
+                        p.bazooka_dir = to_target.normalize();
+                    }
                 }
                 
                 // --- NOUVEAU : L'HÔTE CRÉE LE TIR DU CLIENT ---
                 if state.a_tire {
-                    let nouveau_proj = if state.is_mega {
+                    let center_x = p.hitbox.x + p.hitbox.w / 2.0;
+                    let center_y = p.hitbox.y + p.hitbox.h / 2.0;
+                    
+                    let nouveau_proj = if state.souris_x > 90000.0 && state.souris_y > 90000.0 {
                         Projectile::new_mega(
                             state.id,
-                            p.hitbox.x + p.hitbox.w / 2.0,
-                            p.hitbox.y + p.hitbox.h / 2.0,
+                            center_x,
+                            center_y,
                         )
                     } else {
+                        // On décale le point de spawn dans la direction de visée pour éviter une auto-collision immédiate avec le sol/murs
+                        let spawn_x = center_x + p.bazooka_dir.x * 6.0;
+                        let spawn_y = center_y + p.bazooka_dir.y * 6.0;
+                        
                         Projectile::new(
                             state.id, 
-                            p.hitbox.x + p.hitbox.w / 2.0, 
-                            p.hitbox.y + p.hitbox.h / 2.0, 
+                            spawn_x, 
+                            spawn_y, 
                             state.souris_x, 
                             state.souris_y
                         )
@@ -811,7 +821,7 @@ impl Game {
         let mut net_players = Vec::new();
 
         let my_net_projs: Vec<NetworkProjectile> = self.player.projectiles.iter().map(|p| {
-            NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y, r: p.hitbox.r, is_exploding: p.is_exploding }
+            NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y, r: p.hitbox.r, is_exploding: p.is_exploding, is_mega: p.is_mega }
         }).collect();
 
         net_players.push(NetworkPlayer {
@@ -827,7 +837,7 @@ impl Game {
 
         for other in &self.other_players {
             let other_net_projs: Vec<NetworkProjectile> = other.projectiles.iter().map(|p| {
-                NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y, r: p.hitbox.r, is_exploding: p.is_exploding }
+                NetworkProjectile { x: p.hitbox.x, y: p.hitbox.y, r: p.hitbox.r, is_exploding: p.is_exploding, is_mega: p.is_mega }
             }).collect();
             
             net_players.push(NetworkPlayer {
@@ -863,9 +873,7 @@ impl Game {
                         projectile_marionnette.hitbox.y = net_proj.y;
                         projectile_marionnette.hitbox.r = net_proj.r; 
                         projectile_marionnette.is_exploding = net_proj.is_exploding; 
-                        if net_proj.r > 30.0 {
-                            projectile_marionnette.is_mega = true;
-                        }
+                        projectile_marionnette.is_mega = net_proj.is_mega;
                         
                         let was_exploding = old_projectiles.iter()
                             .find(|p| (p.hitbox.x - net_proj.x).abs() < 5.0 && (p.hitbox.y - net_proj.y).abs() < 5.0)
@@ -873,7 +881,7 @@ impl Game {
                             .unwrap_or(false);
 
                         if !was_exploding && net_proj.is_exploding {
-                            if net_proj.r > 30.0 {
+                            if net_proj.is_mega {
                                 self.explosion_particles.spawn_mega_burst(vec2(net_proj.x, net_proj.y), other.color);
                             } else {
                                 self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
@@ -897,9 +905,7 @@ impl Game {
                         projectile_marionnette.hitbox.y = net_proj.y;
                         projectile_marionnette.hitbox.r = net_proj.r; 
                         projectile_marionnette.is_exploding = net_proj.is_exploding;
-                        if net_proj.r > 30.0 {
-                            projectile_marionnette.is_mega = true;
-                        }
+                        projectile_marionnette.is_mega = net_proj.is_mega;
                         
                         let was_exploding = old_projectiles.iter()
                             .find(|p| (p.hitbox.x - net_proj.x).abs() < 5.0 && (p.hitbox.y - net_proj.y).abs() < 5.0)
@@ -907,7 +913,7 @@ impl Game {
                             .unwrap_or(false);
 
                         if !was_exploding && net_proj.is_exploding {
-                            if net_proj.r > 30.0 {
+                            if net_proj.is_mega {
                                 self.explosion_particles.spawn_mega_burst(vec2(net_proj.x, net_proj.y), self.player.color);
                             } else {
                                 self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
@@ -944,7 +950,6 @@ impl Game {
             a_tire: false, 
             souris_x: aim_target.x,
             souris_y: aim_target.y,
-            is_mega: self.pending_mega,
         }
     }
 

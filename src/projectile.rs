@@ -38,13 +38,16 @@ impl Projectile {
         let mut p = Self::new(owner_id, start_x, start_y, start_x, start_y);
         p.is_mega = true;
         p.degats = 100.0; // Mort instantanée !
-        p.is_exploding = true;
+        p.is_exploding = false; // Initialisé à false pour déclencher la condition !was_exploding && is_exploding
         p.speed = 0.0;
         p.explosion_duration = 1.0; // Dure 1 seconde
         p
     }
 
     pub fn update(&mut self, dt: f32, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, autres_joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) {
+        if self.is_mega && !self.is_exploding {
+            self.explode();
+        }
         let kills = self.check_collisions(
             wallmap,
             hitboxes_murs,

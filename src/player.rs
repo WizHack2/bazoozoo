@@ -193,7 +193,14 @@ impl Player {
     fn tirer_projectile(&mut self, camera: &Camera2D) {
         let mouse_pos = mouse_position();
         let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
-        let nouveau_projectile = Projectile::new(self.id ,self.hitbox.x + self.hitbox.w/2. , self.hitbox.y + self.hitbox.h/2. , world_mouse.x, world_mouse.y);
+        let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+        let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+        
+        // On décale le point de spawn dans la direction de visée pour éviter une auto-collision immédiate avec le sol/murs
+        let spawn_x = center_x + self.bazooka_dir.x * 6.0;
+        let spawn_y = center_y + self.bazooka_dir.y * 6.0;
+        
+        let nouveau_projectile = Projectile::new(self.id, spawn_x, spawn_y, world_mouse.x, world_mouse.y);
         self.projectiles.push(nouveau_projectile);
     }
 
@@ -247,9 +254,7 @@ impl Player {
         if is_key_pressed(KeyCode::O) {
             self.a_tire_cette_frame = true;
             self.a_tire_mega_cette_frame = true;
-            let center_x = self.hitbox.x + self.hitbox.w / 2.0;
-            let center_y = self.hitbox.y + self.hitbox.h / 2.0;
-            self.target_tir_cette_frame = vec2(center_x, center_y);
+            self.target_tir_cette_frame = vec2(99999.0, 99999.0);
         }
         //////////////////////////////////////////////////////////////////////////////////////////////////
 

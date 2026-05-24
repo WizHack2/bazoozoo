@@ -1,0 +1,22 @@
+   Compiling bazoozoo v0.1.0 (/home/guikks/bazoozoo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.67s
+     Running `target/debug/bazoozoo`
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 2 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)
+[DEBUG NETWORK] Reçu 1 paquets
+[DEBUG NETWORK] Reçu ClientUpdate bincode de 1a4873e5-18bc-4086-9a8c-acea9bc7180a (id: 634437827)

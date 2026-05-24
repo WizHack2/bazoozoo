@@ -9,7 +9,6 @@ pub struct PlayerState {
     pub a_tire: bool,          // NOUVEAU : Vrai si le joueur a cliqué à cette frame
     pub souris_x: f32,         // Où il visait
     pub souris_y: f32,
-    pub is_mega: bool,
 }
 
 pub struct NetworkManager {
@@ -61,16 +60,23 @@ impl NetworkManager {
         self.socket.update_peers();
         let mut messages = Vec::new();
         for (_peer, packet) in self.socket.receive() {
-            // Est-ce que c'est le JSON de l'hôte ?
-            if let Ok(json_str) = String::from_utf8(packet.to_vec()) {
-                if json_str.starts_with('{') {
-                    messages.push(GameMessage::HostSync(json_str));
-                    continue;
+            let mut is_json = false;
+            // Un message JSON commence toujours par le caractère '{' (ASCII 123)
+            if packet.first() == Some(&b'{') {
+                if let Ok(json_str) = String::from_utf8(packet.to_vec()) {
+                    // Pour éviter les faux positifs (comme un ID bincode commençant par 123),
+                    // on vérifie si la chaîne est du JSON valide.
+                    if serde_json::from_str::<serde_json::Value>(&json_str).is_ok() {
+                        messages.push(GameMessage::HostSync(json_str));
+                        is_json = true;
+                    }
                 }
             }
-            // Sinon, c'est le PlayerState d'un client !
-            if let Ok(state) = bincode::deserialize::<PlayerState>(&packet) {
-                messages.push(GameMessage::ClientUpdate(state));
+            if !is_json {
+                // Sinon, c'est le PlayerState bincode d'un client !
+                if let Ok(state) = bincode::deserialize::<PlayerState>(&packet) {
+                    messages.push(GameMessage::ClientUpdate(state));
+                }
             }
         }
         messages
