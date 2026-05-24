@@ -48,7 +48,13 @@ async fn main() {
     let mut game = Game::new(&assets, is_host, menu_state.pseudo.clone(), menu_state.character_id);
 
     // Connexion réseau à la salle choisie
-    let server_url = format!("ws://{}:3536/{}", menu_state.server_ip, menu_state.room_name);
+    // Pour l'hôte, on se connecte toujours sur le serveur matchbox local (127.0.0.1)
+    // Pour le client, on se connecte sur l'IP saisie de l'hôte
+    let server_url = if is_host {
+        format!("ws://127.0.0.1:3536/{}", menu_state.room_name)
+    } else {
+        format!("ws://{}:3536/{}", menu_state.server_ip, menu_state.room_name)
+    };
     let mut network = NetworkManager::new(&server_url).await;
     
     loop {

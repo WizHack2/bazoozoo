@@ -5,12 +5,42 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use crate::Assets;
 
-// --- DÉTECTION IP LOCALE ---
+// --- DÉTECTION IP LOCALE ROBUSTE (FONCTIONNE HORSLIGNE SOUS LINUX) ---
+pub fn get_local_ips() -> Vec<String> {
+    let mut ips = Vec::new();
+    
+    // Sur Linux, hostname -I renvoie toutes les IP locales attribuées et fonctionne hors-ligne
+    if let Ok(output) = std::process::Command::new("hostname").arg("-I").output() {
+        if let Ok(s) = String::from_utf8(output.stdout) {
+            for ip in s.split_whitespace() {
+                if !ip.starts_with("127.") && !ip.contains(':') {
+                    ips.push(ip.to_string());
+                }
+            }
+        }
+    }
+    
+    // Méthode de fallback (UDP vers DNS Google) si hostname échoue ou n'est pas dispo
+    if ips.is_empty() {
+        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(local_addr) = socket.local_addr() {
+                    ips.push(local_addr.ip().to_string());
+                }
+            }
+        }
+    }
+    
+    if ips.is_empty() {
+        ips.push("127.0.0.1".to_string());
+    }
+    
+    ips
+}
+
+#[allow(dead_code)]
 pub fn get_local_ip() -> Option<String> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    let local_addr = socket.local_addr().ok()?;
-    Some(local_addr.ip().to_string())
+    get_local_ips().first().cloned()
 }
 
 // --- SCANNER RÉSEAU RAPIDE CONCURRENT ---
@@ -47,44 +77,49 @@ impl NetworkScanner {
         }
 
         thread::spawn(move || {
-            let base_ip = match get_local_ip() {
-                Some(ip) => {
-                    let parts: Vec<&str> = ip.split('.').collect();
-                    if parts.len() == 4 {
-                        format!("{}.{}.{}.", parts[0], parts[1], parts[2])
-                    } else {
-                        "192.168.1.".to_string()
-                    }
+            let local_ips = get_local_ips();
+            let mut subnets = Vec::new();
+            for ip in local_ips {
+                let parts: Vec<&str> = ip.split('.').collect();
+                if parts.len() == 4 {
+                    subnets.push(format!("{}.{}.{}.", parts[0], parts[1], parts[2]));
                 }
-                None => "192.168.1.".to_string(),
-            };
+            }
+            if subnets.is_empty() {
+                subnets.push("192.168.1.".to_string());
+            }
 
             let mut threads = Vec::new();
-            for last_part in 1..=254 {
-                let ip = format!("{}{}", base_ip, last_part);
-                let found_ips = found_ips.clone();
-                let scan_progress = scan_progress.clone();
+            // Pour chaque sous-réseau détecté
+            for base_ip in subnets {
+                for last_part in 1..=254 {
+                    let ip = format!("{}{}", base_ip, last_part);
+                    let found_ips = found_ips.clone();
+                    let scan_progress = scan_progress.clone();
 
-                let handle = thread::spawn(move || {
-                    let addr_str = format!("{}:3536", ip);
-                    if let Ok(addr) = addr_str.parse::<SocketAddr>() {
-                        // Timeout très court pour un réseau local
-                        if TcpStream::connect_timeout(&addr, Duration::from_millis(50)).is_ok() {
-                            let mut list = found_ips.lock().unwrap();
-                            list.push(ip);
+                    let handle = thread::spawn(move || {
+                        let addr_str = format!("{}:3536", ip);
+                        if let Ok(addr) = addr_str.parse::<SocketAddr>() {
+                            // Timeout très court pour un réseau local
+                            if TcpStream::connect_timeout(&addr, Duration::from_millis(50)).is_ok() {
+                                let mut list = found_ips.lock().unwrap();
+                                if !list.contains(&ip) {
+                                    list.push(ip);
+                                }
+                            }
                         }
-                    }
-                    let mut progress = scan_progress.lock().unwrap();
-                    *progress += 1;
-                });
-                threads.push(handle);
+                        let mut progress = scan_progress.lock().unwrap();
+                        *progress += 1;
+                    });
+                    threads.push(handle);
 
-                // Traiter par vagues pour éviter la saturation de sockets
-                if threads.len() >= 32 {
-                    for t in threads {
-                        let _ = t.join();
+                    // Traiter par vagues pour éviter la saturation de sockets
+                    if threads.len() >= 48 {
+                        for t in threads {
+                            let _ = t.join();
+                        }
+                        threads = Vec::new();
                     }
-                    threads = Vec::new();
                 }
             }
 
@@ -120,7 +155,7 @@ impl NetworkScanner {
 
     pub fn get_progress(&self) -> f32 {
         let progress = self.scan_progress.lock().unwrap();
-        *progress as f32 / 254.0
+        (*progress as f32 / 254.0).min(1.0)
     }
 }
 
@@ -145,7 +180,8 @@ pub struct MenuState {
 
 impl MenuState {
     pub fn new() -> Self {
-        let local_ip = get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+        let local_ips = get_local_ips();
+        let primary_ip = local_ips.first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
         
         let scanner = NetworkScanner::new();
         // Lancer un premier scan réseau en arrière-plan d'emblée
@@ -155,8 +191,8 @@ impl MenuState {
             pseudo: format!("Hero_{}", macroquad::rand::gen_range(100, 999)),
             character_id: 0,
             role: MenuRole::Host,
-            room_name: local_ip.clone(),
-            server_ip: "127.0.0.1".to_string(),
+            room_name: primary_ip.clone(),
+            server_ip: primary_ip,
             finished: false,
             scanner,
             active_input: 0,
@@ -173,6 +209,9 @@ impl MenuState {
         }
 
         // --- ENTRÉE DU TEXTE ---
+        // Vérifier si le nom de la room est synchronisé avec l'IP du serveur avant l'édition
+        let sync_room = self.role == MenuRole::Client && self.room_name == self.server_ip;
+
         while let Some(c) = get_char_pressed() {
             if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' || c == ' ' {
                 let limit = match self.active_input {
@@ -202,6 +241,11 @@ impl MenuState {
                 _ => return,
             };
             active_str.pop();
+        }
+
+        // Si le nom de la room était synchronisé, on propage la modification de l'IP du serveur
+        if sync_room {
+            self.room_name = self.server_ip.clone();
         }
 
         // Entrée lance l'arène
