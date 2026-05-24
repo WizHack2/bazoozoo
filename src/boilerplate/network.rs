@@ -69,7 +69,8 @@ impl NetworkManager {
         self.socket.update_peers();
 
         let mut states = Vec::new();
-        for (_peer, packet) in self.socket.receive() {
+        let ch = self.socket.channel_mut(0);
+        for (_peer, packet) in ch.receive() {
             if let Ok(data) = bincode::deserialize::<PlayerState>(&packet) {
                 states.push(data);
             }
@@ -82,22 +83,20 @@ impl NetworkManager {
             .expect("Failed to serialize PlayerState for network send")
             .into_boxed_slice();
         let peers: Vec<_> = self.socket.connected_peers().collect();
-        
+        let ch = self.socket.channel_mut(0);
         for peer in peers {
-            self.socket.send(bytes.clone(), peer);
+            ch.send(bytes.clone(), peer);
         }
     }
 
     pub fn receive_messages(&mut self) -> Vec<GameMessage> {
         self.socket.update_peers();
         let mut messages = Vec::new();
-        for (_peer, packet) in self.socket.receive() {
+        let ch = self.socket.channel_mut(0);
+        for (_peer, packet) in ch.receive() {
             let mut is_json = false;
-            // Un message JSON commence toujours par le caractère '{' (ASCII 123)
             if packet.first() == Some(&b'{') {
                 if let Ok(json_str) = String::from_utf8(packet.to_vec()) {
-                    // Pour éviter les faux positifs (comme un ID bincode commençant par 123),
-                    // on vérifie si la chaîne est du JSON valide.
                     if serde_json::from_str::<serde_json::Value>(&json_str).is_ok() {
                         messages.push(GameMessage::HostSync(json_str));
                         is_json = true;
@@ -105,13 +104,16 @@ impl NetworkManager {
                 }
             }
             if !is_json {
-                // Sinon, c'est le PlayerState bincode d'un client !
                 if let Ok(state) = bincode::deserialize::<PlayerState>(&packet) {
                     messages.push(GameMessage::ClientUpdate(state));
                 }
             }
         }
         messages
+    }
+
+    pub fn is_connected(&mut self) -> bool {
+        !self.socket.channel_mut(0).is_closed()
     }
 
     pub fn peer_count(&self) -> usize {
@@ -121,8 +123,9 @@ impl NetworkManager {
     pub fn send_json(&mut self, json_str: &str) {
         let bytes = json_str.as_bytes().to_vec().into_boxed_slice();
         let peers: Vec<_> = self.socket.connected_peers().collect();
+        let ch = self.socket.channel_mut(0);
         for peer in peers {
-            self.socket.send(bytes.clone(), peer);
+            ch.send(bytes.clone(), peer);
         }
     }
     
