@@ -6,6 +6,7 @@ mod boilerplate;
 mod assets;
 mod projectile;
 mod map_loading;
+mod menu;
 
 use game::Game;
 use assets::Assets;
@@ -19,25 +20,42 @@ async fn main() {
     // Chargement des assets
     let assets = Assets::load().await;
 
-    // Init de la partie
+    // Récupération des arguments système pour préremplir le menu
     let args: Vec<String> = std::env::args().collect();
-    let is_host = !args.contains(&"--client".to_string()); 
-    let mut game = Game::new(&assets, is_host);
-
-    // Init connexion partie
-    let ip = args.iter()
+    let has_client_arg = args.contains(&"--client".to_string()); 
+    let ip_arg = args.iter()
         .find(|arg| arg.starts_with("--ip="))
-        .map(|arg| arg.trim_start_matches("--ip=").to_string())
-        .unwrap_or_else(|| "127.0.0.1".to_string());
-        
-    let server_url = format!("ws://{}:3536/salle_privee", ip);
+        .map(|arg| arg.trim_start_matches("--ip=").to_string());
+
+    // --- ENTRÉE DANS LE MENU INTERACTIF DE SÉLECTION ---
+    let mut menu_state = menu::MenuState::new();
+    if has_client_arg {
+        menu_state.role = menu::MenuRole::Client;
+    }
+    if let Some(ref ip) = ip_arg {
+        menu_state.server_ip = ip.clone();
+        menu_state.room_name = ip.clone();
+    }
+
+    while !menu_state.finished {
+        menu_state.update();
+        menu_state.draw(&assets);
+        next_frame().await;
+    }
+
+    // --- LE MENU EST TERMINÉ, INITIALISATION DE LA PARTIE ---
+    let is_host = menu_state.role == menu::MenuRole::Host;
+    let mut game = Game::new(&assets, is_host, menu_state.pseudo.clone(), menu_state.character_id);
+
+    // Connexion réseau à la salle choisie
+    let server_url = format!("ws://{}:3536/{}", menu_state.server_ip, menu_state.room_name);
     let mut network = NetworkManager::new(&server_url).await;
     
     loop {
         clear_background(BLACK);
 
-        // On passe le réseau et la texture du joueur à l'update !
-        game.update(&mut network, assets.player.clone());
+        // On passe uniquement le réseau à l'update !
+        game.update(&mut network);
         
         game.draw();
 

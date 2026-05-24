@@ -29,6 +29,8 @@ pub struct NetworkPlayer {
     pub aim_y: f32,
     pub score: i32,
     pub projectiles: Vec<NetworkProjectile>,
+    pub pseudo: String,
+    pub character_id: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -176,6 +178,7 @@ pub struct Game {
     pub pending_mouse_y: f32,
     pub explosion_particles: ExplosionParticleSystem,
     pub fox_texture: Texture2D,
+    pub player_textures: Vec<Texture2D>,
 
     // --- TRAINING MODE ---
     pub is_training_mode: bool,
@@ -201,15 +204,46 @@ impl Game {
         ))
     }
 
-    pub fn new(assets: &Assets, is_host1: bool) -> Self {
+    pub fn new(assets: &Assets, is_host1: bool, pseudo: String, character_id: u8) -> Self {
         set_fullscreen(true);
+        let player_textures = vec![
+            assets.player.clone(),
+            assets.fox.clone(),
+            assets.shadow.clone(),
+        ];
+        
+        let chosen_tex = player_textures[character_id as usize].clone();
+        let mut player = Player::new(chosen_tex);
+        player.pseudo = pseudo;
+        player.character_id = character_id;
+        
+        // Configuration des attributs par personnage
+        match character_id {
+            0 => { // Asterion (Balanced)
+                player.speed = 40.0;
+                player.max_ammo = 3;
+                player.current_ammo = 3;
+            }
+            1 => { // Fox (Agile & Swift)
+                player.speed = 48.0;
+                player.max_ammo = 2;
+                player.current_ammo = 2;
+            }
+            2 => { // Shadow (Heavy & Resilient)
+                player.speed = 34.0;
+                player.max_ammo = 4;
+                player.current_ammo = 4;
+            }
+            _ => {}
+        }
+
         Self {
             background: assets.background.clone(),
             hollow_background: assets.hollow_background.clone(),
             platform_tile: assets.platform_tile.clone(),
             is_hollow_map: true,
             debug_show_hitboxes: false,
-            player: Player::new(assets.player.clone()),
+            player,
             wallmap: charger_hitboxes("assets/hollow_map.json".to_string()),
             other_players: Vec::new(),
             is_host: is_host1,
@@ -221,6 +255,7 @@ impl Game {
             pending_mouse_y: 0.0,
             explosion_particles: ExplosionParticleSystem::new(),
             fox_texture: assets.fox.clone(),
+            player_textures,
 
             is_training_mode: false,
             training_difficulty: TrainingDifficulty::Normal,
@@ -231,11 +266,17 @@ impl Game {
         }
     }
 
-    pub fn sync_network(&mut self, states: Vec<PlayerState>, player_tex: Texture2D) {
+    pub fn sync_network(&mut self, states: Vec<PlayerState>) {
         for state in states {
             if let Some(p) = self.other_players.iter_mut().find(|p| p.id == state.id) {
                 p.hitbox.x = state.x;
                 p.hitbox.y = state.y;
+                p.pseudo = state.pseudo.clone();
+                p.character_id = state.character_id;
+
+                // Si la texture est différente de celle actuelle, on la recharge
+                let chosen_tex = self.player_textures[p.character_id as usize].clone();
+                p.animation = crate::boilerplate::animation::Animation::new(Some(chosen_tex), 2, 1, vec![0]);
                 
                 // Update aiming direction from souris coordinates if it is not a mega sentinel
                 if state.souris_x < 90000.0 {
@@ -275,10 +316,21 @@ impl Game {
                 }
 
             } else {
-                let mut new_p = Player::new(player_tex.clone());
+                let chosen_tex = self.player_textures[state.character_id as usize].clone();
+                let mut new_p = Player::new(chosen_tex);
                 new_p.id = state.id;
+                new_p.pseudo = state.pseudo.clone();
+                new_p.character_id = state.character_id;
                 new_p.hitbox.x = state.x;
                 new_p.hitbox.y = state.y;
+
+                match state.character_id {
+                    0 => { new_p.speed = 40.0; new_p.max_ammo = 3; }
+                    1 => { new_p.speed = 48.0; new_p.max_ammo = 2; }
+                    2 => { new_p.speed = 34.0; new_p.max_ammo = 4; }
+                    _ => {}
+                }
+
                 self.other_players.push(new_p);
                 self.join_notification_timer = 3.0;
             }
@@ -310,7 +362,7 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self, network: &mut NetworkManager, player_tex: Texture2D) {
+    pub fn update(&mut self, network: &mut NetworkManager) {
         self.update_player_colors();
         if is_key_pressed(KeyCode::F3) {
             self.debug_show_hitboxes = !self.debug_show_hitboxes;
@@ -396,13 +448,13 @@ impl Game {
                     if self.is_host { client_states.push(state); }
                 }
                 GameMessage::HostSync(json_str) => {
-                    if !self.is_host { self.apply_network_json(&json_str,player_tex.clone()); }
+                    if !self.is_host { self.apply_network_json(&json_str); }
                 }
             }
         }
 
         if self.is_host && !client_states.is_empty() {
-            self.sync_network(client_states,player_tex.clone());
+            self.sync_network(client_states);
         }
 
         ////////PARDON FAUT METTRE HITBOXES MUR LA DCP /////////
@@ -729,6 +781,45 @@ impl Game {
         // --- DESSIN DE L'UI (Sans la caméra) ---
         set_default_camera();
 
+        // Dessin des pseudos au-dessus des joueurs en espace écran pour être ultra net
+        let camera = self.get_game_camera();
+        let draw_pseudo = |p: &Player| {
+            if p.death_timer > 0.0 { return; }
+            let world_pos = vec2(p.hitbox.x + p.hitbox.w / 2.0, p.hitbox.y - 1.8);
+            let screen_pos = camera.world_to_screen(world_pos);
+            let pseudo_text = &p.pseudo;
+            let text_w = measure_text(pseudo_text, None, 16, 1.0).width;
+            
+            // Fond translucide rétro
+            draw_rectangle(
+                screen_pos.x - text_w / 2.0 - 5.0,
+                screen_pos.y - 12.0,
+                text_w + 10.0,
+                16.0,
+                Color::new(0.02, 0.02, 0.03, 0.7)
+            );
+            draw_rectangle_lines(
+                screen_pos.x - text_w / 2.0 - 5.0,
+                screen_pos.y - 12.0,
+                text_w + 10.0,
+                16.0,
+                1.0,
+                p.color
+            );
+            draw_text(
+                pseudo_text,
+                screen_pos.x - text_w / 2.0,
+                screen_pos.y,
+                16.0,
+                WHITE
+            );
+        };
+
+        draw_pseudo(&self.player);
+        for p in &self.other_players {
+            draw_pseudo(p);
+        }
+
         // --- DRAW JOIN NOTIFICATION BANNER ---
         if self.join_notification_timer > 0.0 {
             let progress = (self.join_notification_timer / 3.0).clamp(0.0, 1.0);
@@ -783,8 +874,7 @@ impl Game {
 
         // Entrées des joueurs agrandies avec puces lumineuses
         for (i, p) in all_players.iter().enumerate() {
-            let col_name = get_color_name_french(p.color);
-            let text = format!("{}: {}", col_name, p.score);
+            let text = format!("{}: {}", p.pseudo, p.score);
             let item_y = sb_y + 70.0 + (i as f32 * 35.0);
 
             // Puce de couleur avec effet de halo interne
@@ -833,6 +923,8 @@ impl Game {
             aim_y: self.player.bazooka_dir.y,
             score: self.player.score,
             projectiles: my_net_projs,
+            pseudo: self.player.pseudo.clone(),
+            character_id: self.player.character_id,
         });
 
         for other in &self.other_players {
@@ -849,6 +941,8 @@ impl Game {
                 aim_y: other.bazooka_dir.y,
                 score: other.score,
                 projectiles: other_net_projs,
+                pseudo: other.pseudo.clone(),
+                character_id: other.character_id,
             });
         }
 
@@ -856,7 +950,7 @@ impl Game {
         serde_json::to_string(&state).unwrap_or_else(|_| "{}".to_string())
     }
 
-    pub fn apply_network_json(&mut self, json_str: &str, player_tex: Texture2D) {
+    pub fn apply_network_json(&mut self, json_str: &str) {
         if let Ok(state) = serde_json::from_str::<NetworkGameState>(json_str) {
             for net_p in state.players {
                 if let Some(other) = self.other_players.iter_mut().find(|p| p.id == net_p.id) {
@@ -865,6 +959,12 @@ impl Game {
                     other.pv = net_p.pv;
                     other.score = net_p.score;
                     other.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
+                    other.pseudo = net_p.pseudo.clone();
+                    other.character_id = net_p.character_id;
+
+                    // Charger la texture appropriée
+                    let chosen_tex = self.player_textures[other.character_id as usize].clone();
+                    other.animation = crate::boilerplate::animation::Animation::new(Some(chosen_tex), 2, 1, vec![0]);
                     
                     let old_projectiles = std::mem::take(&mut other.projectiles);
                     for net_proj in net_p.projectiles {
@@ -924,14 +1024,24 @@ impl Game {
                     }
                 }
                 else {
-                    // --- CHANGEMENT ICI : Le client crée l'Hôte s'il ne le connaît pas ---
-                    let mut new_p = Player::new(player_tex.clone());
+                    let chosen_tex = self.player_textures[net_p.character_id as usize].clone();
+                    let mut new_p = Player::new(chosen_tex);
                     new_p.id = net_p.id;
+                    new_p.pseudo = net_p.pseudo.clone();
+                    new_p.character_id = net_p.character_id;
                     new_p.hitbox.x = net_p.x;
                     new_p.hitbox.y = net_p.y;
                     new_p.pv = net_p.pv;
                     new_p.score = net_p.score;
                     new_p.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
+
+                    match net_p.character_id {
+                        0 => { new_p.speed = 40.0; new_p.max_ammo = 3; }
+                        1 => { new_p.speed = 48.0; new_p.max_ammo = 2; }
+                        2 => { new_p.speed = 34.0; new_p.max_ammo = 4; }
+                        _ => {}
+                    }
+
                     self.other_players.push(new_p);
                     self.join_notification_timer = 3.0;
                 }
@@ -950,12 +1060,15 @@ impl Game {
             a_tire: false, 
             souris_x: aim_target.x,
             souris_y: aim_target.y,
+            pseudo: self.player.pseudo.clone(),
+            character_id: self.player.character_id,
         }
     }
 
 
 }
 
+#[allow(dead_code)]
 fn get_color_name_french(color: Color) -> &'static str {
     if color.r > 0.8 && color.g < 0.3 && color.b < 0.3 {
         "Rouge"

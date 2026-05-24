@@ -9,6 +9,8 @@ pub struct PlayerState {
     pub a_tire: bool,          // NOUVEAU : Vrai si le joueur a cliqué à cette frame
     pub souris_x: f32,         // Où il visait
     pub souris_y: f32,
+    pub pseudo: String,
+    pub character_id: u8,
 }
 
 pub struct NetworkManager {

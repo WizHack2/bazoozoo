@@ -100,6 +100,8 @@ fn create_bazooka_texture() -> Texture2D {
 
 pub struct Player {
     pub id: i32,
+    pub pseudo: String,
+    pub character_id: u8,
     pub animation: Animation,
     pub hitbox: Rect,
     pub speed: f32,
@@ -139,6 +141,8 @@ impl Player {
     pub fn new(spritesheet: Texture2D) -> Self {
         Self {
             id: macroquad::rand::rand() as i32,
+            pseudo: "Joueur".to_string(),
+            character_id: 0,
             speed: 40.0,
             hitbox: Rect::new(0.0, 0.0, 5.0, 5.0),
             animation: Animation::new(Some(spritesheet), 2, 1, vec![0]),
