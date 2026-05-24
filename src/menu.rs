@@ -347,7 +347,7 @@ impl MenuState {
         // Bouton CLIENT
         let client_btn_x = col1_x + 180.0;
         let client_btn_y = role_y + 8.0;
-        let client_hover = mouse_position().0 >= client_btn_x && mouse_position().0 <= client_btn_x + btn_w && mouse_position().1 >= client_btn_x + btn_w && mouse_position().1 <= client_btn_y + btn_h;
+        let client_hover = mouse_position().0 >= client_btn_x && mouse_position().0 <= client_btn_x + btn_w && mouse_position().1 >= client_btn_y && mouse_position().1 <= client_btn_y + btn_h;
         if (client_hover || (mouse_position().0 >= client_btn_x && mouse_position().0 <= client_btn_x + btn_w && mouse_position().1 >= client_btn_y && mouse_position().1 <= client_btn_y + btn_h)) && is_mouse_button_pressed(MouseButton::Left) {
             self.role = MenuRole::Client;
             self.active_input = 2; // Focus sur l'IP

@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use macroquad::audio::{Sound, play_sound_once};
 use crate::projectile::Projectile;
 use crate::boilerplate::animation::Animation;
 use crate::boilerplate::physics::Physics;
@@ -184,6 +185,7 @@ impl Player {
         }
     }
 
+    #[allow(dead_code)]
     pub fn heal(&mut self,val:f32){
         if self.pv + val > 100. {
             self.pv = 100.;
@@ -192,8 +194,6 @@ impl Player {
             self.pv += val;
         }
     }
-
-
     fn tirer_projectile(&mut self, camera: &Camera2D) {
         let mouse_pos = mouse_position();
         let world_mouse = camera.screen_to_world(vec2(mouse_pos.0, mouse_pos.1));
@@ -245,23 +245,7 @@ impl Player {
         }
     }
 
-    pub fn handle_input(&mut self, dt: f32, wallmap: &Vec<Rect>) {
-        //////////////////////////////////////////////////////////////////////////////////////////////// TODO A SUPPRIMER V FINALE
-        if is_key_pressed(KeyCode::P){
-            self.heal(5.);
-        }
-        if is_key_pressed(KeyCode::M){
-            self.take_damage(5.);
-        }
-        
-        // --- TRICHE: MEGA EXPLOSION ---
-        if is_key_pressed(KeyCode::O) {
-            self.a_tire_cette_frame = true;
-            self.a_tire_mega_cette_frame = true;
-            self.target_tir_cette_frame = vec2(99999.0, 99999.0);
-        }
-        //////////////////////////////////////////////////////////////////////////////////////////////////
-
+    pub fn handle_input(&mut self, dt: f32, wallmap: &Vec<Rect>, sound_shoot: &Sound, sound_jump: &Sound, sound_reload: &Sound) {
         // --- MOUVEMENTS ZQSD ---
         if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) { self.hitbox.x += self.speed * dt; }
         if wallmap.iter().any(|wall| self.hitbox.overlaps(wall)){
@@ -275,9 +259,9 @@ impl Player {
         //if is_key_down(KeyCode::Up) || is_key_down(KeyCode::Z) { self.hitbox.y -= self.speed * dt; }
         if self.jump_available>0{
             if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Space){
-                //println!("🕹️ SAUT DÉCLENCHÉ ! (Touches détectées)");
                 self.physics.jump(100.);
                 self.jump_available -= 1;
+                play_sound_once(sound_jump);
                 }
         }
 
@@ -285,6 +269,7 @@ impl Player {
         if is_key_pressed(KeyCode::E) && !self.is_reloading && self.current_ammo < self.max_ammo {
             self.is_reloading = true;
             self.reload_timer = 2.0;
+            play_sound_once(sound_reload);
         }
 
         // --- TIR CLAVIER : T/G/F/H/R/Y/V/N = une touche par direction (AZERTY) ---
@@ -323,12 +308,13 @@ impl Player {
                 self.keyboard_dir_timer = 0.5;
                 self.recoil_displacement = 2.0;
 
-                // Muzzle flash particle animation!
                 self.spawn_muzzle_flash(dir);
+                play_sound_once(sound_shoot);
 
                 if self.current_ammo == 0 {
                     self.is_reloading = true;
                     self.reload_timer = 2.0;
+                    play_sound_once(sound_reload);
                 }
             }
         }
@@ -344,7 +330,8 @@ impl Player {
     }
 
 
-    pub fn update(&mut self, camera: &Camera2D, wallmap: &Vec<Rect>, _joueurs: &mut Vec<Player>, is_host: bool) {
+    pub fn update(&mut self, camera: &Camera2D, wallmap: &Vec<Rect>, _joueurs: &mut Vec<Player>, is_host: bool,
+        sound_shoot: &Sound, sound_jump: &Sound, sound_land: &Sound, sound_reload: &Sound) {
         if self.pv <= 0.0 {
             if self.death_timer <= 0.0 {
                 self.death_timer = 1.0;
@@ -433,7 +420,7 @@ impl Player {
         self.was_grounded = self.is_grounded;
 
         // 2. Perform standard inputs
-        self.handle_input(dt, wallmap);
+        self.handle_input(dt, wallmap, sound_shoot, sound_jump, sound_reload);
 
         // --- GRAVITE ---
         let old_y = self.hitbox.y;
@@ -451,7 +438,6 @@ impl Player {
             if length > 0.0 {
                 let dir = dir / length;
 
-                // Muzzle flash particle animation!
                 self.spawn_muzzle_flash(dir);
 
                 const RECOIL_FORCE: f32 = 80.0;
@@ -463,10 +449,12 @@ impl Player {
 
                 self.a_tire_cette_frame = true;
                 self.target_tir_cette_frame = world_mouse;
+                play_sound_once(sound_shoot);
 
                 if self.current_ammo == 0 {
                     self.is_reloading = true;
                     self.reload_timer = 2.0;
+                    play_sound_once(sound_reload);
                 }
             }
 
@@ -521,6 +509,7 @@ impl Player {
         // 4. Trigger Landing Burst
         if !self.was_grounded && self.is_grounded {
             self.spawn_landing_burst();
+            play_sound_once(sound_land);
         }
 
         // 5. Trigger Running Dust Trails

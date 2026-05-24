@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use macroquad::audio::{Sound, play_sound_once};
 use serde::{Deserialize, Serialize};
 
 use crate::map_loading::charger_hitboxes;
@@ -170,7 +171,6 @@ pub struct Game {
     pub wallmap: Vec<Rect>,
     pub other_players: Vec<Player>,
     pub is_host: bool,
-    //TEST TICK RATE
     pub last_network_send: f64,
     pub pending_shot: bool,
     pub pending_mega: bool,
@@ -179,8 +179,12 @@ pub struct Game {
     pub explosion_particles: ExplosionParticleSystem,
     pub fox_texture: Texture2D,
     pub player_textures: Vec<Texture2D>,
+    pub sound_shoot: Sound,
+    pub sound_explosion: Sound,
+    pub sound_jump: Sound,
+    pub sound_land: Sound,
+    pub sound_reload: Sound,
 
-    // --- TRAINING MODE ---
     pub is_training_mode: bool,
     pub training_difficulty: TrainingDifficulty,
     pub training_score: i32,
@@ -256,6 +260,11 @@ impl Game {
             explosion_particles: ExplosionParticleSystem::new(),
             fox_texture: assets.fox.clone(),
             player_textures,
+            sound_shoot: assets.sound_shoot.clone(),
+            sound_explosion: assets.sound_explosion.clone(),
+            sound_jump: assets.sound_jump.clone(),
+            sound_land: assets.sound_land.clone(),
+            sound_reload: assets.sound_reload.clone(),
 
             is_training_mode: false,
             training_difficulty: TrainingDifficulty::Normal,
@@ -486,6 +495,7 @@ impl Game {
                     } else {
                         self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
                     }
+                    play_sound_once(&self.sound_explosion);
                 }
             }
             self.player.projectiles.retain(|p| !p.is_dead());
@@ -510,6 +520,7 @@ impl Game {
                         } else {
                             self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
                         }
+                        play_sound_once(&self.sound_explosion);
                     }
                 }
                 liste_projs.retain(|p| !p.is_dead());
@@ -551,7 +562,8 @@ impl Game {
             }
             other.particles.update(dt);
         }
-        self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
+        self.player.update(&camera, &self.wallmap, &mut self.other_players, self.is_host,
+            &self.sound_shoot, &self.sound_jump, &self.sound_land, &self.sound_reload);
         self.explosion_particles.update(dt, &self.wallmap);
 
         // --- LOGIQUE MODE ENTRAÎNEMENT ---

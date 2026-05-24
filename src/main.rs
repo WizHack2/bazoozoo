@@ -12,7 +12,7 @@ use game::Game;
 use assets::Assets;
 use boilerplate::network::NetworkManager;
 
-#[macroquad::main("My Game")]
+#[macroquad::main("Bazoozoo")]
 async fn main() {
     // Création d'une seed pour la génération aléatoire
     macroquad::rand::srand(miniquad::date::now() as u64);
