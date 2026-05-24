@@ -170,6 +170,7 @@ pub struct Game {
     //TEST TICK RATE
     pub last_network_send: f64,
     pub pending_shot: bool,
+    pub pending_mega: bool,
     pub pending_mouse_x: f32,
     pub pending_mouse_y: f32,
     pub explosion_particles: ExplosionParticleSystem,
@@ -181,6 +182,7 @@ pub struct Game {
     pub training_score: i32,
     pub targets: Vec<Target>,
     pub camera_center: Vec2,
+    pub join_notification_timer: f32,
 }
 
 impl Game {
@@ -213,6 +215,7 @@ impl Game {
 
             last_network_send: macroquad::time::get_time(),
             pending_shot: false,
+            pending_mega: false,
             pending_mouse_x: 0.0,
             pending_mouse_y: 0.0,
             explosion_particles: ExplosionParticleSystem::new(),
@@ -223,6 +226,7 @@ impl Game {
             training_score: 0,
             targets: Vec::new(),
             camera_center: vec2(20.0, 20.0),
+            join_notification_timer: 0.0,
         }
     }
 
@@ -242,13 +246,21 @@ impl Game {
                 
                 // --- NOUVEAU : L'HÔTE CRÉE LE TIR DU CLIENT ---
                 if state.a_tire {
-                    let nouveau_proj = Projectile::new(
-                        state.id, 
-                        p.hitbox.x + p.hitbox.w / 2.0, 
-                        p.hitbox.y + p.hitbox.h / 2.0, 
-                        state.souris_x, 
-                        state.souris_y
-                    );
+                    let nouveau_proj = if state.is_mega {
+                        Projectile::new_mega(
+                            state.id,
+                            p.hitbox.x + p.hitbox.w / 2.0,
+                            p.hitbox.y + p.hitbox.h / 2.0,
+                        )
+                    } else {
+                        Projectile::new(
+                            state.id, 
+                            p.hitbox.x + p.hitbox.w / 2.0, 
+                            p.hitbox.y + p.hitbox.h / 2.0, 
+                            state.souris_x, 
+                            state.souris_y
+                        )
+                    };
                     p.projectiles.push(nouveau_proj);
                 }
 
@@ -258,6 +270,7 @@ impl Game {
                 new_p.hitbox.x = state.x;
                 new_p.hitbox.y = state.y;
                 self.other_players.push(new_p);
+                self.join_notification_timer = 3.0;
             }
         }
     }
@@ -343,6 +356,9 @@ impl Game {
         }
 
         let dt = get_frame_time().clamp(0.001, 0.05);
+        if self.join_notification_timer > 0.0 {
+            self.join_notification_timer -= dt;
+        }
         let player_center = vec2(
             self.player.hitbox.x + self.player.hitbox.w / 2.0,
             self.player.hitbox.y + self.player.hitbox.h / 2.0,
@@ -355,6 +371,10 @@ impl Game {
             self.pending_shot = true;
             self.pending_mouse_x = self.player.target_tir_cette_frame.x;
             self.pending_mouse_y = self.player.target_tir_cette_frame.y;
+            if self.player.a_tire_mega_cette_frame {
+                self.pending_mega = true;
+                self.player.a_tire_mega_cette_frame = false;
+            }
         }
 
         let messages = network.receive_messages();
@@ -399,7 +419,11 @@ impl Game {
                 let was_exploding = proj.is_exploding;
                 proj.update(dt, &self.wallmap, &hitboxes_murs, &mut self.other_players, None);
                 if !was_exploding && proj.is_exploding {
-                    self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
+                    if proj.is_mega {
+                        self.explosion_particles.spawn_mega_burst(vec2(proj.hitbox.x, proj.hitbox.y), self.player.color);
+                    } else {
+                        self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
+                    }
                 }
             }
             self.player.projectiles.retain(|p| !p.is_dead());
@@ -412,13 +436,18 @@ impl Game {
                 .collect();
             // 3. Maintenant que les joueurs n'ont plus leurs balles dans les poches, 
             // la liste `other_players` est totalement LIBRE ! On peut faire les calculs.
-            for liste_projs in &mut projectiles_des_autres {
+            for (i, liste_projs) in projectiles_des_autres.iter_mut().enumerate() {
+                let color = self.other_players[i].color;
                 for proj in liste_projs.iter_mut() {
                     // Les balles des autres peuvent toucher les autres, et l'hôte !
                     let was_exploding = proj.is_exploding;
                     proj.update(dt, &self.wallmap, &hitboxes_murs, &mut self.other_players, Some(&mut self.player));
                     if !was_exploding && proj.is_exploding {
-                        self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
+                        if proj.is_mega {
+                            self.explosion_particles.spawn_mega_burst(vec2(proj.hitbox.x, proj.hitbox.y), color);
+                        } else {
+                            self.explosion_particles.spawn_burst(vec2(proj.hitbox.x, proj.hitbox.y));
+                        }
                     }
                 }
                 liste_projs.retain(|p| !p.is_dead());
@@ -453,11 +482,9 @@ impl Game {
                 }
                 
                 if other.death_timer <= 0.0 {
-                    if self.is_host {
-                        other.pv = 100.0;
-                        other.hitbox.x = 20.0;
-                        other.hitbox.y = 20.0;
-                    }
+                    other.pv = 100.0;
+                    other.hitbox.x = 20.0;
+                    other.hitbox.y = 20.0;
                 }
             }
             other.particles.update(dt);
@@ -556,6 +583,7 @@ impl Game {
                     my_state.souris_y = self.pending_mouse_y;
                     self.pending_shot = false;
                 }
+                self.pending_mega = false;
                 network.send_state(&my_state);
             }
         }
@@ -691,6 +719,36 @@ impl Game {
         // --- DESSIN DE L'UI (Sans la caméra) ---
         set_default_camera();
 
+        // --- DRAW JOIN NOTIFICATION BANNER ---
+        if self.join_notification_timer > 0.0 {
+            let progress = (self.join_notification_timer / 3.0).clamp(0.0, 1.0);
+            let alpha = if progress > 0.8 {
+                (1.0 - progress) / 0.2 // Fade in
+            } else if progress < 0.2 {
+                progress / 0.2 // Fade out
+            } else {
+                1.0 // Fully visible
+            };
+
+            let screen_w = screen_width();
+            let banner_w = 400.0;
+            let banner_h = 45.0;
+            let banner_x = (screen_w - banner_w) / 2.0;
+            let banner_y = 20.0;
+
+            // Translucent glowing glassmorphism banner
+            draw_rectangle(banner_x, banner_y, banner_w, banner_h, Color::new(0.04, 0.04, 0.06, alpha * 0.90));
+            draw_rectangle_lines(banner_x, banner_y, banner_w, banner_h, 2.0, Color::new(0.25, 0.60, 0.95, alpha));
+            
+            // Notification Text
+            let text = "UN JOUEUR A REJOINT LA PARTIE !";
+            draw_text(text, banner_x + 45.0, banner_y + 28.0, 20.0, Color::new(0.3, 0.8, 1.0, alpha));
+            
+            // Glowing neon bullets on the sides
+            draw_circle(banner_x + 25.0, banner_y + 22.0, 5.0, Color::new(0.2, 0.9, 1.0, alpha));
+            draw_circle(banner_x + banner_w - 25.0, banner_y + 22.0, 5.0, Color::new(0.2, 0.9, 1.0, alpha));
+        }
+
         // --- SCOREBOARD ---
         let mut all_players: Vec<&Player> = Vec::new();
         all_players.push(&self.player);
@@ -803,9 +861,11 @@ impl Game {
                         let mut projectile_marionnette = Projectile::new(other.id, net_proj.x, net_proj.y, net_proj.x, net_proj.y);
                         projectile_marionnette.hitbox.x = net_proj.x;
                         projectile_marionnette.hitbox.y = net_proj.y;
-                        
                         projectile_marionnette.hitbox.r = net_proj.r; 
                         projectile_marionnette.is_exploding = net_proj.is_exploding; 
+                        if net_proj.r > 30.0 {
+                            projectile_marionnette.is_mega = true;
+                        }
                         
                         let was_exploding = old_projectiles.iter()
                             .find(|p| (p.hitbox.x - net_proj.x).abs() < 5.0 && (p.hitbox.y - net_proj.y).abs() < 5.0)
@@ -813,7 +873,11 @@ impl Game {
                             .unwrap_or(false);
 
                         if !was_exploding && net_proj.is_exploding {
-                            self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
+                            if net_proj.r > 30.0 {
+                                self.explosion_particles.spawn_mega_burst(vec2(net_proj.x, net_proj.y), other.color);
+                            } else {
+                                self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
+                            }
                         }
                         
                         other.projectiles.push(projectile_marionnette);
@@ -831,9 +895,11 @@ impl Game {
                         let mut projectile_marionnette = Projectile::new(self.player.id, net_proj.x, net_proj.y, net_proj.x, net_proj.y);
                         projectile_marionnette.hitbox.x = net_proj.x;
                         projectile_marionnette.hitbox.y = net_proj.y;
-
                         projectile_marionnette.hitbox.r = net_proj.r; 
                         projectile_marionnette.is_exploding = net_proj.is_exploding;
+                        if net_proj.r > 30.0 {
+                            projectile_marionnette.is_mega = true;
+                        }
                         
                         let was_exploding = old_projectiles.iter()
                             .find(|p| (p.hitbox.x - net_proj.x).abs() < 5.0 && (p.hitbox.y - net_proj.y).abs() < 5.0)
@@ -841,7 +907,11 @@ impl Game {
                             .unwrap_or(false);
 
                         if !was_exploding && net_proj.is_exploding {
-                            self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
+                            if net_proj.r > 30.0 {
+                                self.explosion_particles.spawn_mega_burst(vec2(net_proj.x, net_proj.y), self.player.color);
+                            } else {
+                                self.explosion_particles.spawn_burst(vec2(net_proj.x, net_proj.y));
+                            }
                         }
                         
                         self.player.projectiles.push(projectile_marionnette);
@@ -857,6 +927,7 @@ impl Game {
                     new_p.score = net_p.score;
                     new_p.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
                     self.other_players.push(new_p);
+                    self.join_notification_timer = 3.0;
                 }
             }
         }
@@ -873,6 +944,7 @@ impl Game {
             a_tire: false, 
             souris_x: aim_target.x,
             souris_y: aim_target.y,
+            is_mega: self.pending_mega,
         }
     }
 

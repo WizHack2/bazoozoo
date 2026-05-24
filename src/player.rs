@@ -131,6 +131,7 @@ pub struct Player {
     pub is_reloading: bool,
     pub reload_timer: f32,
     pub a_tire_cette_frame: bool,
+    pub a_tire_mega_cette_frame: bool,
     pub target_tir_cette_frame: Vec2,
 }
 
@@ -165,6 +166,7 @@ impl Player {
             is_reloading: false,
             reload_timer: 0.0,
             a_tire_cette_frame: false,
+            a_tire_mega_cette_frame: false,
             target_tir_cette_frame: Vec2::ZERO,
         }
     }
@@ -239,6 +241,15 @@ impl Player {
         }
         if is_key_pressed(KeyCode::M){
             self.take_damage(5.);
+        }
+        
+        // --- TRICHE: MEGA EXPLOSION ---
+        if is_key_pressed(KeyCode::O) {
+            self.a_tire_cette_frame = true;
+            self.a_tire_mega_cette_frame = true;
+            let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+            let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+            self.target_tir_cette_frame = vec2(center_x, center_y);
         }
         //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -351,11 +362,9 @@ impl Player {
             }
             
             if self.death_timer <= 0.0 {
-                if is_host {
-                    self.pv = 100.0;
-                    self.hitbox.x = 20.0;
-                    self.hitbox.y = 20.0;
-                }
+                self.pv = 100.0;
+                self.hitbox.x = 20.0;
+                self.hitbox.y = 20.0;
             }
             
             self.particles.update(dt);
@@ -455,6 +464,16 @@ impl Player {
             if is_host {
                 self.tirer_projectile(camera);
             }
+        }
+
+        // --- HOST SIDE MEGA SHOOT DETECT ---
+        if is_host && self.a_tire_mega_cette_frame {
+            let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+            let center_y = self.hitbox.y + self.hitbox.h / 2.0;
+            let nouveau_projectile = Projectile::new_mega(self.id, center_x, center_y);
+            self.projectiles.push(nouveau_projectile);
+            self.spawn_muzzle_flash(vec2(0.0, -1.0));
+            self.a_tire_mega_cette_frame = false;
         }
 
         // 3. Collision check and grounding resolution

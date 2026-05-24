@@ -11,6 +11,7 @@ pub struct Projectile {
     pub explosion_duration: f32,
     pub degats: f32,
     pub players_already_damaged: Vec<i32>,
+    pub is_mega: bool,
 }
 
 impl Projectile {
@@ -29,7 +30,18 @@ impl Projectile {
             explosion_duration: 0.2,
             degats: 10.0,
             players_already_damaged: Vec::new(),
+            is_mega: false,
         }
+    }
+
+    pub fn new_mega(owner_id: i32, start_x: f32, start_y: f32) -> Self {
+        let mut p = Self::new(owner_id, start_x, start_y, start_x, start_y);
+        p.is_mega = true;
+        p.degats = 100.0; // Mort instantanée !
+        p.is_exploding = true;
+        p.speed = 0.0;
+        p.explosion_duration = 1.0; // Dure 1 seconde
+        p
     }
 
     pub fn update(&mut self, dt: f32, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, autres_joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) {
@@ -59,7 +71,11 @@ impl Projectile {
         if self.is_exploding {
             self.explosion_duration -= dt;
             // Le rayon change pendant l'explosion
-            self.hitbox.r = self.explosion_duration * 50.0; 
+            if self.is_mega {
+                self.hitbox.r = (1.0 - self.explosion_duration) * 800.0; // Couvre toute la map
+            } else {
+                self.hitbox.r = self.explosion_duration * 50.0; 
+            }
         } else {
             self.hitbox.x += self.dir_x * self.speed * dt;
             self.hitbox.y += self.dir_y * self.speed * dt;
@@ -241,6 +257,39 @@ impl ExplosionParticleSystem {
                 position: pos,
                 velocity,
                 color,
+                initial_size,
+                lifetime,
+                max_lifetime: lifetime,
+                trail: Vec::new(),
+                is_smoke: false,
+            });
+        }
+    }
+
+    pub fn spawn_mega_burst(&mut self, pos: Vec2, color: Color) {
+        use macroquad::rand::gen_range;
+        use std::f32::consts::PI;
+
+        let count = gen_range(600, 800);
+        for _ in 0..count {
+            let angle = gen_range(0.0, 2.0 * PI);
+            let speed = gen_range(40.0, 250.0);
+            let velocity = Vec2::new(angle.cos() * speed, angle.sin() * speed);
+
+            let alpha = gen_range(0.8, 1.0);
+            let p_color = if gen_range(0.0, 1.0) < 0.8 {
+                Color::new(color.r, color.g, color.b, alpha)
+            } else {
+                Color::new(1.0, 1.0, 1.0, alpha)
+            };
+
+            let initial_size = gen_range(0.2, 0.9);
+            let lifetime = gen_range(1.5, 3.5);
+
+            self.particles.push(ExplosionParticle {
+                position: pos,
+                velocity,
+                color: p_color,
                 initial_size,
                 lifetime,
                 max_lifetime: lifetime,
