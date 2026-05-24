@@ -114,6 +114,10 @@ impl NetworkManager {
         messages
     }
 
+    pub fn peer_count(&self) -> usize {
+        self.socket.connected_peers().count()
+    }
+
     pub fn send_json(&mut self, json_str: &str) {
         let bytes = json_str.as_bytes().to_vec().into_boxed_slice();
         let peers: Vec<_> = self.socket.connected_peers().collect();

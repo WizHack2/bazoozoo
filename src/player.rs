@@ -79,6 +79,7 @@ pub struct Player {
     pub a_tire_cette_frame: bool,
     pub a_tire_mega_cette_frame: bool,
     pub target_tir_cette_frame: Vec2,
+    pub last_seen: f64,
 }
 
 impl Player {
@@ -116,6 +117,7 @@ impl Player {
             a_tire_cette_frame: false,
             a_tire_mega_cette_frame: false,
             target_tir_cette_frame: Vec2::ZERO,
+            last_seen: 0.0,
         }
     }
 

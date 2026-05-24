@@ -82,6 +82,8 @@ pub struct Game {
     pub join_notification_timer: f32,
     pub layout: Layout,
     pub keybindings: KeyBindings,
+    pub last_peer_count: usize,
+    pub waiting_for_players_timer: f64,
 }
 
 impl Game {
@@ -134,12 +136,15 @@ impl Game {
             join_notification_timer: 0.0,
             layout,
             keybindings: kb,
+            last_peer_count: 0,
+            waiting_for_players_timer: 0.0,
         }
     }
 
     pub fn sync_network(&mut self, states: Vec<PlayerState>) {
         for state in states {
             if let Some(p) = self.other_players.iter_mut().find(|p| p.id == state.id) {
+                p.last_seen = macroquad::time::get_time();
                 p.hitbox.x = state.x;
                 p.hitbox.y = state.y;
                 p.pseudo = state.pseudo.clone();
@@ -199,6 +204,8 @@ impl Game {
                 new_p.speed = stats.speed;
                 new_p.max_ammo = stats.max_ammo;
 
+                let now = macroquad::time::get_time();
+                new_p.last_seen = now;
                 self.other_players.push(new_p);
                 self.join_notification_timer = 3.0;
             }
@@ -358,6 +365,13 @@ impl Game {
         }
     }
 
+    fn cleanup_stale_players(&mut self) {
+        let now = macroquad::time::get_time();
+        self.other_players.retain(|p| {
+            p.last_seen == 0.0 || now - p.last_seen < 5.0
+        });
+    }
+
     fn handle_network_messages(&mut self, network: &mut NetworkManager) {
         let messages = network.receive_messages();
         let mut client_states = Vec::new();
@@ -374,6 +388,9 @@ impl Game {
         if self.is_host && !client_states.is_empty() {
             self.sync_network(client_states);
         }
+
+        self.last_peer_count = network.peer_count();
+        self.waiting_for_players_timer += get_frame_time() as f64;
     }
 
     fn update_host_projectiles(&mut self, dt: f32, hitboxes_murs: &Vec<Rect>) {
@@ -475,7 +492,6 @@ impl Game {
 
         self.handle_training_mode(dt);
         self.update_camera_and_timers(dt);
-        self.handle_pending_shots();
         self.handle_network_messages(network);
 
         let aspect_ratio = screen_width() / screen_height();
@@ -495,6 +511,8 @@ impl Game {
         let camera = self.get_game_camera();
         self.player.update(&camera, &self.wallmap, &mut self.other_players, self.is_host,
             &self.res.sound_shoot, &self.res.sound_jump, &self.res.sound_land, &self.res.sound_reload, &self.keybindings);
+        self.handle_pending_shots();
+        self.cleanup_stale_players();
         self.particles.update(dt, &self.wallmap);
 
         self.send_network_state(network, &camera);
@@ -588,8 +606,30 @@ impl Game {
         set_default_camera();
         self.draw_pseudo_labels();
         self.draw_join_notification();
+        self.draw_connection_status();
         self.draw_scoreboard();
         self.draw_hud();
+    }
+
+    fn draw_connection_status(&self) {
+        let status_y = 110.0;
+        if self.last_peer_count > 0 {
+            let text = if self.is_host {
+                format!("✓ {} joueur(s) connecté(s)", self.last_peer_count + 1)
+            } else {
+                "✓ Connecté au serveur".to_string()
+            };
+            draw_text(&text, 10.0, status_y, 16.0, GREEN);
+        } else if self.waiting_for_players_timer > 5.0 {
+            let msg = if self.is_host {
+                "⚠ Aucun joueur connecté — partagez votre IP à vos coéquipiers"
+            } else {
+                "⚠ Impossible de joindre le serveur — vérifiez l'IP saisie"
+            };
+            draw_text(msg, 10.0, status_y, 16.0, RED);
+        } else if self.waiting_for_players_timer > 1.0 {
+            draw_text("◌ Connexion en cours...", 10.0, status_y, 16.0, ORANGE);
+        }
     }
 
     fn draw_pseudo_labels(&self) {
@@ -756,6 +796,7 @@ impl Game {
         if let Ok(state) = serde_json::from_str::<NetworkGameState>(json_str) {
             for net_p in state.players {
                 if let Some(other) = self.other_players.iter_mut().find(|p| p.id == net_p.id) {
+                    other.last_seen = macroquad::time::get_time();
                     other.hitbox.x = net_p.x;
                     other.hitbox.y = net_p.y;
                     other.pv = net_p.pv;
@@ -794,6 +835,7 @@ impl Game {
                     new_p.speed = stats.speed;
                     new_p.max_ammo = stats.max_ammo;
 
+                    new_p.last_seen = macroquad::time::get_time();
                     self.other_players.push(new_p);
                     self.join_notification_timer = 3.0;
                 }

@@ -191,17 +191,15 @@ impl MenuState {
         let primary_ip = local_ips.first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
         
         let scanner = NetworkScanner::new();
-        // Lancer un premier scan réseau en arrière-plan d'emblée
-        scanner.start_scan();
 
         let clean_room = primary_ip.replace('.', "_");
 
-        let mut state = Self {
+        Self {
             pseudo: format!("Hero_{}", macroquad::rand::gen_range(100, 999)),
             character_id: 0,
             role: MenuRole::Host,
             room_name: format!("room_{}", clean_room),
-            server_ip: "127.0.0.1".to_string(), // Par défaut localhost pour le jeu local immédiat
+            server_ip: "127.0.0.1".to_string(),
             finished: false,
             scanner,
             active_input: 0,
@@ -210,10 +208,8 @@ impl MenuState {
             local_ips,
             server_process: None,
             server_error: None,
-            previous_role: MenuRole::Host,
-        };
-        state.try_start_server();
-        state
+            previous_role: MenuRole::Client,
+        }
     }
 
     fn try_start_server(&mut self) {
@@ -258,6 +254,10 @@ impl MenuState {
     pub fn update(&mut self) {
         self.cursor_timer += get_frame_time();
 
+        if self.role == MenuRole::Client {
+            self.room_name = format!("room_{}", self.server_ip.replace('.', "_"));
+        }
+
         // --- CHANGEMENT DE RÔLE (gestion serveur) ---
         if self.role != self.previous_role {
             match self.role {
@@ -267,31 +267,20 @@ impl MenuState {
             self.previous_role = self.role;
         }
 
-        // --- CHANGER DE RÔLE ---
         if is_key_pressed(KeyCode::Tab) {
-            self.active_input = (self.active_input + 1) % if self.role == MenuRole::Host { 2 } else { 3 };
+            self.active_input = (self.active_input + 1) % 2;
         }
-
-        // --- ENTRÉE DU TEXTE ---
-        // Vérifier si le nom de la salle est le nom par défaut de l'IP du serveur OU de l'IP locale
-        let clean_local_ip_room = format!("room_{}", get_local_ips().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string()).replace('.', "_"));
-        let clean_current_server_ip_room = format!("room_{}", self.server_ip.replace('.', "_"));
-        let sync_room = self.role == MenuRole::Client && 
-            (self.room_name == clean_current_server_ip_room || self.room_name == clean_local_ip_room);
 
         while let Some(c) = get_char_pressed() {
             if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' || c == ' ' {
                 let limit = match self.active_input {
                     0 => 12,
-                    1 => 15,
-                    2 => 15,
                     _ => 15,
                 };
                 let active_str = match self.active_input {
                     0 => &mut self.pseudo,
-                    1 => &mut self.room_name,
-                    2 => &mut self.server_ip,
-                    _ => continue,
+                    1 if self.role == MenuRole::Host => &mut self.room_name,
+                    _ => &mut self.server_ip,
                 };
                 if active_str.len() < limit {
                     active_str.push(c);
@@ -299,23 +288,15 @@ impl MenuState {
             }
         }
 
-        // Effacer
         if is_key_pressed(KeyCode::Backspace) {
             let active_str = match self.active_input {
                 0 => &mut self.pseudo,
-                1 => &mut self.room_name,
-                2 => &mut self.server_ip,
-                _ => return,
+                1 if self.role == MenuRole::Host => &mut self.room_name,
+                _ => &mut self.server_ip,
             };
             active_str.pop();
         }
 
-        // Si le nom de la room était synchronisé, on propage la modification de l'IP du serveur
-        if sync_room {
-            self.room_name = format!("room_{}", self.server_ip.replace('.', "_"));
-        }
-
-        // Entrée lance l'arène
         if is_key_pressed(KeyCode::Enter) {
             self.finished = true;
         }
@@ -412,7 +393,7 @@ impl MenuState {
         let client_hover = mouse_position().0 >= client_btn_x && mouse_position().0 <= client_btn_x + btn_w && mouse_position().1 >= client_btn_y && mouse_position().1 <= client_btn_y + btn_h;
         if (client_hover || (mouse_position().0 >= client_btn_x && mouse_position().0 <= client_btn_x + btn_w && mouse_position().1 >= client_btn_y && mouse_position().1 <= client_btn_y + btn_h)) && is_mouse_button_pressed(MouseButton::Left) {
             self.role = MenuRole::Client;
-            self.active_input = 2; // Focus sur l'IP
+            self.active_input = 1;
             self.scanner.start_scan();
         }
         draw_rectangle(client_btn_x, client_btn_y, btn_w, btn_h, if self.role == MenuRole::Client { Color::new(0.2, 0.4, 0.6, 0.7) } else { Color::new(0.05, 0.05, 0.08, 1.0) });
@@ -488,11 +469,11 @@ impl MenuState {
                 draw_rectangle(caret_x, room_box_y + 8.0, 2.0, 20.0, GREEN);
             }
 
-            draw_text("Donnez votre IP + nom de room à vos coéquipiers.", col1_x, room_box_y + 52.0, 12.0, GRAY);
+            draw_text("Donnez votre IP à vos coéquipiers pour qu'ils rejoignent.", col1_x, room_box_y + 52.0, 12.0, GRAY);
         } else {
-            draw_text("IP DU SERVEUR / MATCHMAKER :", col1_x, net_y, 18.0, Color::new(0.8, 0.8, 0.9, 1.0));
+            draw_text("IP DU SERVEUR HÔTE :", col1_x, net_y, 18.0, Color::new(0.8, 0.8, 0.9, 1.0));
             let ip_box_y = net_y + 8.0;
-            let ip_active = self.active_input == 2;
+            let ip_active = self.active_input == 1;
             draw_rectangle(col1_x, ip_box_y, box_w, box_h, Color::new(0.01, 0.01, 0.02, 1.0));
             draw_rectangle_lines(col1_x, ip_box_y, box_w, box_h, 2.0, if ip_active { SKYBLUE } else { Color::new(0.15, 0.15, 0.2, 1.0) });
             draw_text(&self.server_ip, col1_x + 10.0, ip_box_y + 24.0, 20.0, WHITE);
