@@ -26,6 +26,7 @@ pub struct NetworkPlayer {
     pub pv: f32,
     pub aim_x: f32,
     pub aim_y: f32,
+    pub score: i32,
     pub projectiles: Vec<NetworkProjectile>,
 }
 
@@ -261,7 +262,33 @@ impl Game {
         }
     }
 
+    pub fn update_player_colors(&mut self) {
+        // Collect all players (local player + other players)
+        let mut players: Vec<&mut Player> = Vec::new();
+        players.push(&mut self.player);
+        for p in &mut self.other_players {
+            players.push(p);
+        }
+        
+        // Sort deterministically by ID
+        players.sort_by_key(|p| p.id);
+
+        let colors = [
+            Color::new(0.95, 0.25, 0.25, 1.0), // Rouge
+            Color::new(0.25, 0.60, 0.95, 1.0), // Bleu
+            Color::new(0.95, 0.85, 0.15, 1.0), // Jaune
+            Color::new(0.25, 0.85, 0.25, 1.0), // Vert
+        ];
+
+        for (i, p) in players.into_iter().enumerate() {
+            let color = colors[i % colors.len()];
+            p.color = color;
+            p.animation.change_color(color);
+        }
+    }
+
     pub fn update(&mut self, network: &mut NetworkManager, player_tex: Texture2D) {
+        self.update_player_colors();
         if is_key_pressed(KeyCode::F3) {
             self.debug_show_hitboxes = !self.debug_show_hitboxes;
         }
@@ -400,14 +427,40 @@ impl Game {
             for (i, joueur) in self.other_players.iter_mut().enumerate() {
                 joueur.projectiles = std::mem::take(&mut projectiles_des_autres[i]);
             }
+        }
 
-            for other in &mut self.other_players {
-                if other.pv <= 0.0 {
-                    other.pv = 100.0;
-                    other.hitbox.x = 20.0;
-                    other.hitbox.y = 20.0;
+        for other in &mut self.other_players {
+            if other.pv <= 0.0 {
+                if other.death_timer <= 0.0 {
+                    other.death_timer = 1.0;
                 }
             }
+            if other.death_timer > 0.0 {
+                other.death_timer -= dt;
+                
+                // Spawn ascending glowing death particles in their player color!
+                if macroquad::rand::gen_range(0, 4) == 0 {
+                    use macroquad::rand::gen_range;
+                    let spawn_pos = vec2(
+                        other.hitbox.x + gen_range(0.0, other.hitbox.w),
+                        other.hitbox.y + other.hitbox.h,
+                    );
+                    let velocity = vec2(gen_range(-3.0, 3.0), gen_range(-25.0, -10.0));
+                    let p_color = Color::new(other.color.r, other.color.g, other.color.b, 0.7);
+                    let size = gen_range(0.8, 1.6);
+                    let lifetime = gen_range(0.5, 1.0);
+                    other.particles.spawn(spawn_pos, velocity, p_color, size, lifetime);
+                }
+                
+                if other.death_timer <= 0.0 {
+                    if self.is_host {
+                        other.pv = 100.0;
+                        other.hitbox.x = 20.0;
+                        other.hitbox.y = 20.0;
+                    }
+                }
+            }
+            other.particles.update(dt);
         }
         self.player.update(&camera,&self.wallmap, &mut self.other_players,self.is_host);
         self.explosion_particles.update(dt, &self.wallmap);
@@ -513,6 +566,7 @@ impl Game {
 
 
     pub fn draw(&mut self) {
+        self.update_player_colors();
         // --- CONFIGURATION CAMERA ---
         let aspect_ratio = screen_width() / screen_height();
         let virtual_width = VIRTUAL_HEIGHT * aspect_ratio;
@@ -637,6 +691,41 @@ impl Game {
         // --- DESSIN DE L'UI (Sans la caméra) ---
         set_default_camera();
 
+        // --- SCOREBOARD ---
+        let mut all_players: Vec<&Player> = Vec::new();
+        all_players.push(&self.player);
+        for p in &self.other_players {
+            all_players.push(p);
+        }
+        all_players.sort_by(|a, b| b.score.cmp(&a.score));
+
+        let sb_w = 280.0;
+        let sb_x = screen_width() - sb_w - 30.0;
+        let sb_y = 30.0;
+        let sb_h = 60.0 + (all_players.len() as f32 * 35.0);
+
+        // Panneau sombre semi-transparent rétro-futuriste (effet glassmorphism haut de gamme)
+        draw_rectangle(sb_x, sb_y, sb_w, sb_h, Color::new(0.04, 0.04, 0.06, 0.92));
+        draw_rectangle_lines(sb_x, sb_y, sb_w, sb_h, 3.0, Color::new(0.25, 0.25, 0.30, 1.0));
+        draw_rectangle_lines(sb_x + 3.0, sb_y + 3.0, sb_w - 6.0, sb_h - 6.0, 1.0, Color::new(0.12, 0.12, 0.15, 1.0));
+
+        // Titre agrandi
+        draw_text("TABLEAU DES SCORES", sb_x + 32.0, sb_y + 31.0, 22.0, WHITE);
+        draw_line(sb_x + 15.0, sb_y + 40.0, sb_x + sb_w - 15.0, sb_y + 40.0, 2.0, Color::new(0.35, 0.35, 0.40, 1.0));
+
+        // Entrées des joueurs agrandies avec puces lumineuses
+        for (i, p) in all_players.iter().enumerate() {
+            let col_name = get_color_name_french(p.color);
+            let text = format!("{}: {}", col_name, p.score);
+            let item_y = sb_y + 70.0 + (i as f32 * 35.0);
+
+            // Puce de couleur avec effet de halo interne
+            draw_circle(sb_x + 30.0, item_y - 7.0, 7.0, p.color);
+            draw_circle(sb_x + 30.0, item_y - 7.0, 3.0, WHITE);
+            
+            draw_text(&text, sb_x + 50.0, item_y, 22.0, p.color);
+        }
+
         // Draw HUD help text
         let font_size = 20.0;
         let text_color = LIGHTGRAY;
@@ -674,6 +763,7 @@ impl Game {
             pv: self.player.pv,
             aim_x: self.player.bazooka_dir.x,
             aim_y: self.player.bazooka_dir.y,
+            score: self.player.score,
             projectiles: my_net_projs,
         });
 
@@ -689,6 +779,7 @@ impl Game {
                 pv: other.pv,
                 aim_x: other.bazooka_dir.x,
                 aim_y: other.bazooka_dir.y,
+                score: other.score,
                 projectiles: other_net_projs,
             });
         }
@@ -704,6 +795,7 @@ impl Game {
                     other.hitbox.x = net_p.x;
                     other.hitbox.y = net_p.y;
                     other.pv = net_p.pv;
+                    other.score = net_p.score;
                     other.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
                     
                     let old_projectiles = std::mem::take(&mut other.projectiles);
@@ -732,6 +824,7 @@ impl Game {
                         self.player.hitbox.y = 20.0;
                     }
                     self.player.pv = net_p.pv;
+                    self.player.score = net_p.score;
                     
                     let old_projectiles = std::mem::take(&mut self.player.projectiles);
                     for net_proj in net_p.projectiles {
@@ -761,6 +854,7 @@ impl Game {
                     new_p.hitbox.x = net_p.x;
                     new_p.hitbox.y = net_p.y;
                     new_p.pv = net_p.pv;
+                    new_p.score = net_p.score;
                     new_p.bazooka_dir = vec2(net_p.aim_x, net_p.aim_y);
                     self.other_players.push(new_p);
                 }
@@ -783,4 +877,18 @@ impl Game {
     }
 
 
+}
+
+fn get_color_name_french(color: Color) -> &'static str {
+    if color.r > 0.8 && color.g < 0.3 && color.b < 0.3 {
+        "Rouge"
+    } else if color.r < 0.3 && color.g < 0.7 && color.b > 0.8 {
+        "Bleu"
+    } else if color.r > 0.8 && color.g > 0.7 && color.b < 0.3 {
+        "Jaune"
+    } else if color.r < 0.3 && color.g > 0.8 && color.b < 0.3 {
+        "Vert"
+    } else {
+        "Joueur"
+    }
 }

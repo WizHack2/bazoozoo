@@ -27,13 +27,35 @@ impl Projectile {
             speed: 150.0,
             is_exploding: false,
             explosion_duration: 0.2,
-            degats: 5.0,
+            degats: 10.0,
             players_already_damaged: Vec::new(),
         }
     }
 
-    pub fn update(&mut self, dt: f32, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, autres_joueurs: &mut Vec<Player>, local_player: Option<&mut Player>) {
-        self.check_collisions(wallmap, hitboxes_murs, autres_joueurs, local_player);
+    pub fn update(&mut self, dt: f32, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, autres_joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) {
+        let kills = self.check_collisions(
+            wallmap,
+            hitboxes_murs,
+            autres_joueurs,
+            match local_player {
+                Some(ref mut p) => Some(*p),
+                None => None,
+            }
+        );
+        if kills > 0 {
+            let o_id = self.owner_id;
+            if let Some(ref mut lp) = local_player {
+                if lp.id == o_id {
+                    lp.score += kills;
+                }
+            }
+            for p in autres_joueurs.iter_mut() {
+                if p.id == o_id {
+                    p.score += kills;
+                    break;
+                }
+            }
+        }
         if self.is_exploding {
             self.explosion_duration -= dt;
             // Le rayon change pendant l'explosion
@@ -50,14 +72,19 @@ impl Projectile {
         }
     }
 
-    pub fn check_collisions(&mut self, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) {
+    pub fn check_collisions(&mut self, wallmap: &Vec<Rect>, hitboxes_murs: &Vec<Rect>, joueurs: &mut Vec<Player>, mut local_player: Option<&mut Player>) -> i32 {
+        let mut kills = 0;
         if self.is_exploding {
             // Phase d'explosion : infliger les dégâts de zone
             for joueur in joueurs.iter_mut() {
                 if self.hitbox.overlaps_rect(&joueur.hitbox) {
                     if !self.players_already_damaged.contains(&joueur.id) && joueur.id != self.owner_id { 
                         self.players_already_damaged.push(joueur.id);
+                        let was_alive = joueur.pv > 0.0;
                         joueur.take_damage(self.degats);
+                        if was_alive && joueur.pv <= 0.0 {
+                            kills += 1;
+                        }
                     }
                 }
             }
@@ -65,7 +92,11 @@ impl Projectile {
                 if self.hitbox.overlaps_rect(&lp.hitbox) {
                     if !self.players_already_damaged.contains(&lp.id) && lp.id != self.owner_id {
                         self.players_already_damaged.push(lp.id);
+                        let was_alive = lp.pv > 0.0;
                         lp.take_damage(self.degats);
+                        if was_alive && lp.pv <= 0.0 {
+                            kills += 1;
+                        }
                     }
                 }
             }
@@ -80,6 +111,7 @@ impl Projectile {
                 self.explode();
             }
         }
+        kills
     }
 
     pub fn explode(&mut self) {

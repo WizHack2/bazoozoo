@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 
+#[derive(Clone)]
 pub struct Animation {
     spritesheet: Option<Texture2D>,
     color: Color,

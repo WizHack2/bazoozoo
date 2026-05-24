@@ -100,12 +100,15 @@ fn create_bazooka_texture() -> Texture2D {
 
 pub struct Player {
     pub id: i32,
-    animation: Animation,
+    pub animation: Animation,
     pub hitbox: Rect,
     pub speed: f32,
     pub projectiles: Vec<Projectile>,
     pub pv: f32,
     physics: Physics,
+    pub score: i32,
+    pub color: Color,
+    pub death_timer: f32,
     jump_available: i32,
 
     // --- PARTICLE SYSTEM FIELDS ---
@@ -141,6 +144,9 @@ impl Player {
             projectiles: Vec::new(),
             pv: 100.0,
             physics: Physics::new(200.0, 250.0),
+            score: 0,
+            color: WHITE,
+            death_timer: 0.0,
             jump_available: 2,
 
             particles: ParticleSystem::new(),
@@ -320,12 +326,41 @@ impl Player {
 
     pub fn update(&mut self, camera: &Camera2D, wallmap: &Vec<Rect>, _joueurs: &mut Vec<Player>, is_host: bool) {
         if self.pv <= 0.0 {
-            self.pv = 100.0;
-            self.hitbox.x = 20.0;
-            self.hitbox.y = 20.0;
+            if self.death_timer <= 0.0 {
+                self.death_timer = 1.0;
+            }
         }
 
         let dt = get_frame_time().clamp(0.001, 0.05);
+
+        if self.death_timer > 0.0 {
+            self.death_timer -= dt;
+            
+            // Spawn ascending glowing death particles in their player color!
+            if macroquad::rand::gen_range(0, 4) == 0 {
+                use macroquad::rand::gen_range;
+                let spawn_pos = vec2(
+                    self.hitbox.x + gen_range(0.0, self.hitbox.w),
+                    self.hitbox.y + self.hitbox.h,
+                );
+                let velocity = vec2(gen_range(-3.0, 3.0), gen_range(-25.0, -10.0));
+                let p_color = Color::new(self.color.r, self.color.g, self.color.b, 0.7);
+                let size = gen_range(0.8, 1.6);
+                let lifetime = gen_range(0.5, 1.0);
+                self.particles.spawn(spawn_pos, velocity, p_color, size, lifetime);
+            }
+            
+            if self.death_timer <= 0.0 {
+                if is_host {
+                    self.pv = 100.0;
+                    self.hitbox.x = 20.0;
+                    self.hitbox.y = 20.0;
+                }
+            }
+            
+            self.particles.update(dt);
+            return;
+        }
         self.a_tire_cette_frame = false;
 
         // --- TIMERS ET DEPLACEMENTS BAZOOKA ---
@@ -617,16 +652,65 @@ impl Player {
     pub fn draw(&self) {
         self.particles.draw();
         
+        if self.death_timer > 0.0 {
+            // Draw elegant Tombstone in their color fading out
+            let progress = (self.death_timer / 1.0).clamp(0.0, 1.0);
+            let alpha = progress;
+            let c = Color::new(self.color.r, self.color.g, self.color.b, alpha * 0.8);
+            let border_c = Color::new(self.color.r * 1.2, self.color.g * 1.2, self.color.b * 1.2, alpha);
+            
+            let tx = self.hitbox.x;
+            let ty = self.hitbox.y;
+            let tw = self.hitbox.w;
+            let th = self.hitbox.h;
+            
+            // Tombstone shape
+            draw_rectangle(tx + 0.5, ty + 1.0, tw - 1.0, th - 1.0, c);
+            // Rounded top
+            draw_circle(tx + tw/2.0, ty + 1.0, (tw - 1.0)/2.0, c);
+            
+            // Outline
+            draw_rectangle_lines(tx + 0.5, ty + 1.0, tw - 1.0, th - 1.0, 0.2, border_c);
+            
+            // Cross inside
+            let cx = tx + tw/2.0;
+            let cy = ty + th/2.0 + 0.3;
+            draw_line(cx - 0.8, cy, cx + 0.8, cy, 0.25, border_c);
+            draw_line(cx, cy - 1.0, cx, cy + 0.8, 0.25, border_c);
+            return;
+        }
+
+        let center_x = self.hitbox.x + self.hitbox.w / 2.0;
+        let center_y = self.hitbox.y + self.hitbox.h / 2.0;
         let look_right = self.bazooka_dir.x >= 0.0;
-        self.animation.draw_current_frame(self.hitbox.x, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
+
+        // Render perfect pixel art contour outline around the PNG's transparent contours
+        let mut outline_anim = self.animation.clone();
+        outline_anim.change_color(self.color);
+        let offset = 0.15;
+        outline_anim.draw_current_frame(self.hitbox.x - offset, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
+        outline_anim.draw_current_frame(self.hitbox.x + offset, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
+        outline_anim.draw_current_frame(self.hitbox.x, self.hitbox.y - offset, self.hitbox.w, self.hitbox.h, look_right);
+        outline_anim.draw_current_frame(self.hitbox.x, self.hitbox.y + offset, self.hitbox.w, self.hitbox.h, look_right);
+
+        // Draw a small retro pointer chevron above their head
+        draw_triangle(
+            vec2(center_x, self.hitbox.y - 0.4),
+            vec2(center_x - 0.35, self.hitbox.y - 0.75),
+            vec2(center_x + 0.35, self.hitbox.y - 0.75),
+            self.color
+        );
+        
+        // Draw the player sprite normally with its gorgeous original details on top
+        let mut main_anim = self.animation.clone();
+        main_anim.change_color(WHITE);
+        main_anim.draw_current_frame(self.hitbox.x, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
         
         self.draw_healthbar();
         self.draw_ammobar();
 
         // Draw rotated Bazooka
         let angle = self.bazooka_dir.y.atan2(self.bazooka_dir.x);
-        let center_x = self.hitbox.x + self.hitbox.w / 2.0;
-        let center_y = self.hitbox.y + self.hitbox.h / 2.0;
         
         // recoil visual displacement
         let bazooka_pos = vec2(center_x, center_y) - self.bazooka_dir * self.recoil_displacement;
