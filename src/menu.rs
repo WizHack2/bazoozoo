@@ -168,6 +168,14 @@ pub enum MenuRole {
     Client,
 }
 
+#[derive(PartialEq, Clone)]
+enum ConnectionTest {
+    Idle,
+    Testing,
+    Success(String),
+    Failure(String),
+}
+
 pub struct MenuState {
     pub pseudo: String,
     pub character_id: u8,
@@ -183,6 +191,7 @@ pub struct MenuState {
     server_process: Option<Child>,
     server_error: Option<String>,
     previous_role: MenuRole,
+    connection_test: ConnectionTest,
 }
 
 impl MenuState {
@@ -209,6 +218,7 @@ impl MenuState {
             server_process: None,
             server_error: None,
             previous_role: MenuRole::Client,
+            connection_test: ConnectionTest::Idle,
         }
     }
 
@@ -483,8 +493,47 @@ impl MenuState {
                 draw_rectangle(caret_x, ip_box_y + 8.0, 2.0, 20.0, SKYBLUE);
             }
 
+            // --- BOUTON TEST CONNEXION ---
+            let test_y = ip_box_y + 46.0;
+            let test_btn_w = 220.0;
+            let test_btn_h = 28.0;
+            let test_x = col1_x + box_w - test_btn_w;
+
+            let test_hover = mouse_position().0 >= test_x && mouse_position().0 <= test_x + test_btn_w
+                && mouse_position().1 >= test_y && mouse_position().1 <= test_y + test_btn_h;
+
+            // Couleur selon l'état
+            let (test_color, test_label) = match self.connection_test {
+                ConnectionTest::Idle => (Color::new(0.08, 0.12, 0.2, 1.0), "Tester la connexion"),
+                ConnectionTest::Testing => (Color::new(0.2, 0.2, 0.1, 1.0), "Connexion..."),
+                ConnectionTest::Success(_) => (Color::new(0.1, 0.25, 0.1, 1.0), "✓ Serveur trouvé"),
+                ConnectionTest::Failure(_) => (Color::new(0.25, 0.1, 0.1, 1.0), "✗ Aucun serveur"),
+            };
+
+            draw_rectangle(test_x, test_y, test_btn_w, test_btn_h, if test_hover { Color::new(0.15, 0.15, 0.25, 1.0) } else { test_color });
+            draw_rectangle_lines(test_x, test_y, test_btn_w, test_btn_h, 1.0, Color::new(0.3, 0.3, 0.4, 1.0));
+            draw_text(test_label, test_x + 12.0, test_y + 18.0, 13.0, SKYBLUE);
+
+            if test_hover && is_mouse_button_pressed(MouseButton::Left) && self.connection_test != ConnectionTest::Testing {
+                self.connection_test = ConnectionTest::Testing;
+                let addr = format!("{}:3536", self.server_ip);
+                match addr.parse::<SocketAddr>().ok().and_then(|a| TcpStream::connect_timeout(&a, Duration::from_millis(500)).ok()) {
+                    Some(_) => self.connection_test = ConnectionTest::Success(format!("✓ Connexion réussie à {}:3536", self.server_ip)),
+                    None => self.connection_test = ConnectionTest::Failure(format!("✗ Aucun serveur détecté sur {}", self.server_ip)),
+                }
+            }
+
+            // Afficher un message en dessous du bouton si succès/échec
+            if let ConnectionTest::Success(msg) | ConnectionTest::Failure(msg) = &self.connection_test {
+                let msg_color = match self.connection_test {
+                    ConnectionTest::Success(_) => Color::new(0.3, 0.9, 0.3, 1.0),
+                    _ => Color::new(0.9, 0.3, 0.3, 1.0),
+                };
+                draw_text(msg, col1_x, test_y + 45.0, 12.0, msg_color);
+            }
+
             // --- SECTION SCAN RÉSEAU ---
-            let scan_y = ip_box_y + 50.0;
+            let scan_y = ip_box_y + 100.0;
             if self.scanner.is_scanning() {
                 draw_rectangle(col1_x, scan_y, box_w, 20.0, Color::new(0.1, 0.1, 0.15, 1.0));
                 draw_rectangle(col1_x, scan_y, box_w * self.scanner.get_progress(), 20.0, Color::new(0.0, 0.6, 0.9, 0.7));
