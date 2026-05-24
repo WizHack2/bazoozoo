@@ -49,7 +49,7 @@ pub fn get_local_ip() -> Option<String> {
 pub struct NetworkScanner {
     found_ips: Arc<Mutex<Vec<String>>>,
     is_scanning: Arc<Mutex<bool>>,
-    scan_progress: Arc<Mutex<usize>>,
+    scan_progress: Arc<Mutex<(usize, usize)>>, // (done, total)
 }
 
 impl NetworkScanner {
@@ -57,7 +57,7 @@ impl NetworkScanner {
         Self {
             found_ips: Arc::new(Mutex::new(Vec::new())),
             is_scanning: Arc::new(Mutex::new(false)),
-            scan_progress: Arc::new(Mutex::new(0)),
+            scan_progress: Arc::new(Mutex::new((0, 0))),
         }
     }
 
@@ -69,75 +69,82 @@ impl NetworkScanner {
         {
             let mut scanning = is_scanning.lock().expect("Mutex poisoned in menu");
             if *scanning {
-                return; // Déjà en cours
+                return;
             }
             *scanning = true;
-            let mut ips = found_ips.lock().expect("Mutex poisoned in menu");
-            ips.clear();
-            let mut progress = scan_progress.lock().expect("Mutex poisoned in menu");
-            *progress = 0;
+            found_ips.lock().expect("Mutex poisoned in menu").clear();
+            *scan_progress.lock().expect("Mutex poisoned in menu") = (0, 0);
         }
 
         thread::spawn(move || {
             let local_ips = get_local_ips();
-            let mut subnets = Vec::new();
-            for ip in local_ips {
+            let mut candidates: Vec<String> = Vec::new();
+
+            for ip in &local_ips {
                 let parts: Vec<&str> = ip.split('.').collect();
                 if parts.len() == 4 {
-                    subnets.push(format!("{}.{}.{}.", parts[0], parts[1], parts[2]));
+                    let base = format!("{}.{}.{}.", parts[0], parts[1], parts[2]);
+                    for last in 1..=254 {
+                        candidates.push(format!("{}{}", base, last));
+                    }
                 }
             }
-            if subnets.is_empty() {
-                subnets.push("192.168.1.".to_string());
+
+            // Fallback si aucune IP locale détectée
+            if candidates.is_empty() {
+                for last in 1..=254 {
+                    candidates.push(format!("192.168.1.{}", last));
+                }
             }
 
-            let mut threads = Vec::new();
-            // Pour chaque sous-réseau détecté
-            for base_ip in subnets {
-                for last_part in 1..=254 {
-                    let ip = format!("{}{}", base_ip, last_part);
-                    let found_ips = found_ips.clone();
-                    let scan_progress = scan_progress.clone();
+            // Ajouter 127.0.0.1 s'il n'est pas déjà dans la plage locale
+            if !candidates.contains(&"127.0.0.1".to_string()) {
+                candidates.push("127.0.0.1".to_string());
+            }
 
-                    let handle = thread::spawn(move || {
+            let total = candidates.len();
+            *scan_progress.lock().expect("Mutex poisoned in menu") = (0, total);
+
+            let done = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let next_idx = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let found = found_ips.clone();
+            let progress_up = scan_progress.clone();
+
+            const WORKERS: usize = 32;
+            let mut handles = Vec::new();
+
+            for _ in 0..WORKERS {
+                let candidates = candidates.clone();
+                let found = found.clone();
+                let done = done.clone();
+                let next_idx = next_idx.clone();
+                let progress_up = progress_up.clone();
+
+                handles.push(thread::spawn(move || {
+                    loop {
+                        let idx = next_idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if idx >= candidates.len() {
+                            break;
+                        }
+                        let ip = &candidates[idx];
                         let addr_str = format!("{}:3536", ip);
                         if let Ok(addr) = addr_str.parse::<SocketAddr>() {
-                            // Timeout très court pour un réseau local
                             if TcpStream::connect_timeout(&addr, Duration::from_millis(50)).is_ok() {
-                                let mut list = found_ips.lock().expect("Mutex poisoned in menu");
-                                if !list.contains(&ip) {
-                                    list.push(ip);
+                                let mut list = found.lock().expect("Mutex poisoned in menu");
+                                if !list.contains(ip) {
+                                    list.push(ip.clone());
                                 }
                             }
                         }
-                        let mut progress = scan_progress.lock().expect("Mutex poisoned in menu");
-                        *progress += 1;
-                    });
-                    threads.push(handle);
-
-                    // Traiter par vagues pour éviter la saturation de sockets
-                    if threads.len() >= 48 {
-                        for t in threads {
-                            let _ = t.join();
-                        }
-                        threads = Vec::new();
+                        done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let d = done.load(std::sync::atomic::Ordering::Relaxed);
+                        *progress_up.lock().expect("Mutex poisoned in menu") = (d, total);
                     }
-                }
+                }));
             }
 
-            for t in threads {
-                let _ = t.join();
-            }
-
-            // Toujours scanner l'adresse locale (127.0.0.1)
-            let local_addr_str = "127.0.0.1:3536";
-            if let Ok(addr) = local_addr_str.parse::<SocketAddr>() {
-                if TcpStream::connect_timeout(&addr, Duration::from_millis(50)).is_ok() {
-                    let mut list = found_ips.lock().expect("Mutex poisoned in menu");
-                    if !list.contains(&"127.0.0.1".to_string()) {
-                        list.push("127.0.0.1".to_string());
-                    }
-                }
+            for h in handles {
+                let _ = h.join();
             }
 
             let mut scanning = is_scanning.lock().expect("Mutex poisoned in menu");
@@ -156,8 +163,8 @@ impl NetworkScanner {
     }
 
     pub fn get_progress(&self) -> f32 {
-        let progress = self.scan_progress.lock().expect("Mutex poisoned in menu");
-        (*progress as f32 / 254.0).min(1.0)
+        let (done, total) = *self.scan_progress.lock().expect("Mutex poisoned in menu");
+        if total == 0 { 0.0 } else { (done as f32 / total as f32).min(1.0) }
     }
 }
 
