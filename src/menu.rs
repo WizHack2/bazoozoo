@@ -187,11 +187,13 @@ impl MenuState {
         // Lancer un premier scan réseau en arrière-plan d'emblée
         scanner.start_scan();
 
+        let clean_room = primary_ip.replace('.', "_");
+
         Self {
             pseudo: format!("Hero_{}", macroquad::rand::gen_range(100, 999)),
             character_id: 0,
             role: MenuRole::Host,
-            room_name: primary_ip.clone(),
+            room_name: format!("room_{}", clean_room),
             server_ip: primary_ip,
             finished: false,
             scanner,
@@ -210,7 +212,8 @@ impl MenuState {
 
         // --- ENTRÉE DU TEXTE ---
         // Vérifier si le nom de la room est synchronisé avec l'IP du serveur avant l'édition
-        let sync_room = self.role == MenuRole::Client && self.room_name == self.server_ip;
+        let clean_current_server_ip_room = format!("room_{}", self.server_ip.replace('.', "_"));
+        let sync_room = self.role == MenuRole::Client && self.room_name == clean_current_server_ip_room;
 
         while let Some(c) = get_char_pressed() {
             if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' || c == ' ' {
@@ -245,7 +248,7 @@ impl MenuState {
 
         // Si le nom de la room était synchronisé, on propage la modification de l'IP du serveur
         if sync_room {
-            self.room_name = self.server_ip.clone();
+            self.room_name = format!("room_{}", self.server_ip.replace('.', "_"));
         }
 
         // Entrée lance l'arène
@@ -414,7 +417,7 @@ impl MenuState {
                         
                         if item_hover && is_mouse_button_pressed(MouseButton::Left) {
                             self.server_ip = found_ip.clone();
-                            self.room_name = found_ip.clone(); // Le nom de room par défaut est l'IP
+                            self.room_name = format!("room_{}", found_ip.replace('.', "_"));
                         }
 
                         draw_rectangle(col1_x, item_y - 18.0, box_w, 24.0, if item_hover { Color::new(0.0, 0.2, 0.4, 0.4) } else { Color::new(0.02, 0.02, 0.04, 0.6) });
