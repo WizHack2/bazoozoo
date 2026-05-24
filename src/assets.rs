@@ -78,7 +78,7 @@ fn make_wav(samples: &[i16], sample_rate: u32) -> Vec<u8> {
     wav.extend(&sample_rate.to_le_bytes());
     wav.extend(&(sample_rate * bytes_per_sample as u32 * num_channels as u32).to_le_bytes());
     wav.extend(&(bytes_per_sample as u16 * num_channels).to_le_bytes());
-    wav.extend(&(bytes_per_sample * 8).to_le_bytes());
+    wav.extend(&(bytes_per_sample as u16 * 8).to_le_bytes());
 
     // data chunk
     wav.extend(b"data");
