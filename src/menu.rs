@@ -194,7 +194,7 @@ impl MenuState {
             character_id: 0,
             role: MenuRole::Host,
             room_name: format!("room_{}", clean_room),
-            server_ip: primary_ip,
+            server_ip: "127.0.0.1".to_string(), // Par défaut localhost pour le jeu local immédiat
             finished: false,
             scanner,
             active_input: 0,
@@ -211,9 +211,11 @@ impl MenuState {
         }
 
         // --- ENTRÉE DU TEXTE ---
-        // Vérifier si le nom de la room est synchronisé avec l'IP du serveur avant l'édition
+        // Vérifier si le nom de la salle est le nom par défaut de l'IP du serveur OU de l'IP locale
+        let clean_local_ip_room = format!("room_{}", get_local_ips().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string()).replace('.', "_"));
         let clean_current_server_ip_room = format!("room_{}", self.server_ip.replace('.', "_"));
-        let sync_room = self.role == MenuRole::Client && self.room_name == clean_current_server_ip_room;
+        let sync_room = self.role == MenuRole::Client && 
+            (self.room_name == clean_current_server_ip_room || self.room_name == clean_local_ip_room);
 
         while let Some(c) = get_char_pressed() {
             if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' || c == ' ' {
