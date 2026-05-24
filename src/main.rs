@@ -25,7 +25,13 @@ async fn main() {
     let mut game = Game::new(&assets, is_host);
 
     // Init connexion partie
-    let mut network = NetworkManager::new("ws://127.0.0.1:3536/salle_privee").await;
+    let ip = args.iter()
+        .find(|arg| arg.starts_with("--ip="))
+        .map(|arg| arg.trim_start_matches("--ip=").to_string())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+        
+    let server_url = format!("ws://{}:3536/salle_privee", ip);
+    let mut network = NetworkManager::new(&server_url).await;
     
     loop {
         clear_background(BLACK);
