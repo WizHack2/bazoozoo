@@ -66,14 +66,14 @@ impl NetworkScanner {
         let scan_progress = self.scan_progress.clone();
 
         {
-            let mut scanning = is_scanning.lock().unwrap();
+            let mut scanning = is_scanning.lock().expect("Mutex poisoned in menu");
             if *scanning {
                 return; // Déjà en cours
             }
             *scanning = true;
-            let mut ips = found_ips.lock().unwrap();
+            let mut ips = found_ips.lock().expect("Mutex poisoned in menu");
             ips.clear();
-            let mut progress = scan_progress.lock().unwrap();
+            let mut progress = scan_progress.lock().expect("Mutex poisoned in menu");
             *progress = 0;
         }
 
@@ -103,13 +103,13 @@ impl NetworkScanner {
                         if let Ok(addr) = addr_str.parse::<SocketAddr>() {
                             // Timeout très court pour un réseau local
                             if TcpStream::connect_timeout(&addr, Duration::from_millis(50)).is_ok() {
-                                let mut list = found_ips.lock().unwrap();
+                                let mut list = found_ips.lock().expect("Mutex poisoned in menu");
                                 if !list.contains(&ip) {
                                     list.push(ip);
                                 }
                             }
                         }
-                        let mut progress = scan_progress.lock().unwrap();
+                        let mut progress = scan_progress.lock().expect("Mutex poisoned in menu");
                         *progress += 1;
                     });
                     threads.push(handle);
@@ -132,30 +132,30 @@ impl NetworkScanner {
             let local_addr_str = "127.0.0.1:3536";
             if let Ok(addr) = local_addr_str.parse::<SocketAddr>() {
                 if TcpStream::connect_timeout(&addr, Duration::from_millis(50)).is_ok() {
-                    let mut list = found_ips.lock().unwrap();
+                    let mut list = found_ips.lock().expect("Mutex poisoned in menu");
                     if !list.contains(&"127.0.0.1".to_string()) {
                         list.push("127.0.0.1".to_string());
                     }
                 }
             }
 
-            let mut scanning = is_scanning.lock().unwrap();
+            let mut scanning = is_scanning.lock().expect("Mutex poisoned in menu");
             *scanning = false;
         });
     }
 
     pub fn get_found_ips(&self) -> Vec<String> {
-        let list = self.found_ips.lock().unwrap();
+        let list = self.found_ips.lock().expect("Mutex poisoned in menu");
         list.clone()
     }
 
     pub fn is_scanning(&self) -> bool {
-        let scanning = self.is_scanning.lock().unwrap();
+        let scanning = self.is_scanning.lock().expect("Mutex poisoned in menu");
         *scanning
     }
 
     pub fn get_progress(&self) -> f32 {
-        let progress = self.scan_progress.lock().unwrap();
+        let progress = self.scan_progress.lock().expect("Mutex poisoned in menu");
         (*progress as f32 / 254.0).min(1.0)
     }
 }

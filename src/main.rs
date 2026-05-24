@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 
+mod constants;
 mod game;
 mod player;
 mod boilerplate;
@@ -7,7 +8,9 @@ mod assets;
 mod projectile;
 mod map_loading;
 mod menu;
+mod particle;
 mod keybindings;
+mod target;
 
 use game::Game;
 use assets::Assets;

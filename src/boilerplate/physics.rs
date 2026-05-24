@@ -92,3 +92,46 @@ impl Physics {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jump() {
+        let mut phys = Physics::new(200.0, 250.0);
+        phys.jump(100.0);
+        assert_eq!(phys.get_velocity_vec().y, -100.0);
+    }
+
+    #[test]
+    fn test_set_velocity_y() {
+        let mut phys = Physics::new(200.0, 250.0);
+        phys.set_velocity_y(50.0);
+        assert_eq!(phys.get_velocity_vec().y, 50.0);
+    }
+
+    #[test]
+    fn test_add_velocity() {
+        let mut phys = Physics::new(200.0, 250.0);
+        phys.add_velocity(vec2(10.0, 20.0));
+        assert_eq!(phys.get_velocity_vec().x, 10.0);
+        assert_eq!(phys.get_velocity_vec().y, 20.0);
+    }
+
+    #[test]
+    fn test_add_velocity_x() {
+        let mut phys = Physics::new(200.0, 250.0);
+        phys.set_velocity_y(0.0);
+        phys.add_velocity_x(15.0);
+        assert_eq!(phys.get_velocity_vec().x, 15.0);
+    }
+
+    #[test]
+    fn test_set_gravity() {
+        let mut phys = Physics::new(200.0, 250.0);
+        assert_eq!(phys.gravity_force, 200.0);
+        phys.set_gravity(500.0);
+        assert_eq!(phys.gravity_force, 500.0);
+    }
+}
+

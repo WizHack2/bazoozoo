@@ -1,6 +1,34 @@
 use matchbox_socket::WebRtcSocket;
 use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NetworkProjectile {
+    pub x: f32,
+    pub y: f32,
+    pub r: f32,
+    pub is_exploding: bool,
+    pub is_mega: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NetworkPlayer {
+    pub id: i32,
+    pub x: f32,
+    pub y: f32,
+    pub pv: f32,
+    pub aim_x: f32,
+    pub aim_y: f32,
+    pub score: i32,
+    pub projectiles: Vec<NetworkProjectile>,
+    pub pseudo: String,
+    pub character_id: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NetworkGameState {
+    pub players: Vec<NetworkPlayer>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlayerState {
     pub id: i32,
@@ -50,7 +78,9 @@ impl NetworkManager {
     }
 
     pub fn send_state(&mut self, state: &PlayerState) {
-        let bytes = bincode::serialize(state).unwrap().into_boxed_slice();
+        let bytes = bincode::serialize(state)
+            .expect("Failed to serialize PlayerState for network send")
+            .into_boxed_slice();
         let peers: Vec<_> = self.socket.connected_peers().collect();
         
         for peer in peers {

@@ -17,29 +17,40 @@ pub struct Assets {
 
 impl Assets {
     pub async fn load() -> Self {
-        let background = load_texture("assets/background.png").await.unwrap();
+        let background = load_texture("assets/background.png").await
+            .expect("Failed to load assets/background.png");
         background.set_filter(FilterMode::Nearest);
 
-        let hollow_background = load_texture("assets/hollow_map.png").await.unwrap();
+        let hollow_background = load_texture("assets/hollow_map.png").await
+            .expect("Failed to load assets/hollow_map.png");
         hollow_background.set_filter(FilterMode::Nearest);
 
-        let platform_tile = load_texture("assets/platform_tile.png").await.unwrap();
+        let platform_tile = load_texture("assets/platform_tile.png").await
+            .expect("Failed to load assets/platform_tile.png");
         platform_tile.set_filter(FilterMode::Nearest);
 
-        let player = load_texture("assets/Asterion.png").await.unwrap();
+        let player = load_texture("assets/Asterion.png").await
+            .expect("Failed to load assets/Asterion.png");
         player.set_filter(FilterMode::Nearest);
 
-        let fox = load_texture("assets/fox.png").await.unwrap();
+        let fox = load_texture("assets/fox.png").await
+            .expect("Failed to load assets/fox.png");
         fox.set_filter(FilterMode::Nearest);
 
-        let player_img = load_image("assets/Asterion.png").await.unwrap();
+        let player_img = load_image("assets/Asterion.png").await
+            .expect("Failed to load assets/Asterion.png");
         let shadow = create_shadow_texture(&player_img);
 
-        let sound_shoot = load_sound_from_bytes(&make_wav_shoot()).await.unwrap();
-        let sound_explosion = load_sound_from_bytes(&make_wav_explosion()).await.unwrap();
-        let sound_jump = load_sound_from_bytes(&make_wav_jump()).await.unwrap();
-        let sound_land = load_sound_from_bytes(&make_wav_land()).await.unwrap();
-        let sound_reload = load_sound_from_bytes(&make_wav_reload()).await.unwrap();
+        let sound_shoot = load_sound_from_bytes(&make_wav_shoot()).await
+            .expect("Failed to generate shoot sound");
+        let sound_explosion = load_sound_from_bytes(&make_wav_explosion()).await
+            .expect("Failed to generate explosion sound");
+        let sound_jump = load_sound_from_bytes(&make_wav_jump()).await
+            .expect("Failed to generate jump sound");
+        let sound_land = load_sound_from_bytes(&make_wav_land()).await
+            .expect("Failed to generate land sound");
+        let sound_reload = load_sound_from_bytes(&make_wav_reload()).await
+            .expect("Failed to generate reload sound");
 
         Self {
             background,

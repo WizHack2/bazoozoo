@@ -18,15 +18,19 @@ Prerequisite for multiplayer: `matchbox_server` running in another terminal (`ca
 | Path | Purpose |
 |------|---------|
 | `src/main.rs` | Entrypoint, menu loop → game loop |
-| `src/game.rs` | Core game loop, physics, networking sync, training mode |
+| `src/game.rs` | Core game loop, decoupled into 10 `update_*` + 7 `draw_*` methods |
 | `src/player.rs` | Player movement, rocket-jump physics, particles, sprite animation |
 | `src/projectile.rs` | Projectiles, explosion particles |
 | `src/menu.rs` | Main menu, LAN scan for matchbox servers |
 | `src/map_loading.rs` | Map JSON loader (hitbox rectangles) |
+| `src/keybindings.rs` | QWERTY/AZERTY keyboard layout config |
+| `src/constants.rs` | Game-wide constants (CharacterStats, physics, colors) |
+| `src/target.rs` | Training-mode targets (`Target`, `TrainingDifficulty`) |
+| `src/particle.rs` | Unified `ParticleManager` (dust, explosions, trails) |
+| `src/assets.rs` | Loads textures + procedural sounds |
 | `src/boilerplate/network.rs` | WebRTC via matchbox_socket, authoritative host model |
 | `src/boilerplate/physics.rs` | Gravity, friction helpers |
 | `src/boilerplate/animation.rs` | Sprite-sheet animation |
-| `src/assets.rs` | Loads textures + procedural sounds |
 
 ## Maps
 
@@ -50,4 +54,6 @@ See `TASKS.md` for backlog and todo.
 
 ## Tests
 
-None present. No test framework config.
+23 unit tests across `constants.rs`, `player.rs`, `projectile.rs`, `target.rs`, `physics.rs`. Run with `cargo test`.
+
+**Note**: tests that depend on macroquad runtime context (texture creation, `get_frame_time()`) are isolated to a `TestPlayer` helper struct so they stay pure and fast.

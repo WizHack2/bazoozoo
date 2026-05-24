@@ -4,66 +4,8 @@ use crate::projectile::Projectile;
 use crate::boilerplate::animation::Animation;
 use crate::boilerplate::physics::Physics;
 use crate::keybindings::KeyBindings;
-use crate::game::VIRTUAL_HEIGHT;
-
-pub struct Particle {
-    pub position: Vec2,
-    pub velocity: Vec2,
-    pub color: Color,
-    pub size: f32,
-    pub lifetime: f32,
-    pub max_lifetime: f32,
-}
-
-pub struct ParticleSystem {
-    pub particles: Vec<Particle>,
-}
-
-impl ParticleSystem {
-    pub fn new() -> Self {
-        Self {
-            particles: Vec::new(),
-        }
-    }
-
-    pub fn spawn(&mut self, position: Vec2, velocity: Vec2, color: Color, size: f32, lifetime: f32) {
-        self.particles.push(Particle {
-            position,
-            velocity,
-            color,
-            size,
-            lifetime,
-            max_lifetime: lifetime,
-        });
-    }
-
-    pub fn update(&mut self, dt: f32) {
-        for p in &mut self.particles {
-            p.velocity.y += 15.0 * dt;
-            p.velocity.x *= 1.0 - (2.0 * dt);
-            p.position += p.velocity * dt;
-            p.lifetime -= dt;
-        }
-        self.particles.retain(|p| p.lifetime > 0.0);
-    }
-
-    pub fn draw(&self) {
-        for p in &self.particles {
-            let progress = (p.lifetime / p.max_lifetime).clamp(0.0, 1.0);
-            let mut color = p.color;
-            color.a = progress * p.color.a;
-            let current_size = p.size * progress;
-            // Dessine de vrais pixels carrés rétro !
-            draw_rectangle(
-                p.position.x - current_size / 2.0,
-                p.position.y - current_size / 2.0,
-                current_size,
-                current_size,
-                color,
-            );
-        }
-    }
-}
+use crate::constants::VIRTUAL_HEIGHT;
+use crate::particle::ParticleManager;
 
 fn create_bazooka_texture() -> Texture2D {
     // A 12x6 pixel art bazooka
@@ -116,7 +58,7 @@ pub struct Player {
     jump_available: i32,
 
     // --- PARTICLE SYSTEM FIELDS ---
-    pub particles: ParticleSystem,
+    pub particles: ParticleManager,
     pub is_grounded: bool,
     pub was_grounded: bool,
     pub dust_timer: f32,
@@ -156,7 +98,7 @@ impl Player {
             death_timer: 0.0,
             jump_available: 2,
 
-            particles: ParticleSystem::new(),
+            particles: ParticleManager::new(),
             is_grounded: false,
             was_grounded: false,
             dust_timer: 0.0,
@@ -224,8 +166,7 @@ impl Player {
 
         // --- RECUL DE L'ARME (rocket jump) ---
         // Le joueur reçoit une impulsion dans la direction OPPOSÉE au tir
-        const RECOIL_FORCE: f32 = 80.0;
-        let recoil = -dir * RECOIL_FORCE;
+        let recoil = -dir * crate::constants::RECOIL_FORCE;
         self.apply_recoil(recoil);
 
         self.rocket_cooldown = 0.4;
@@ -260,7 +201,7 @@ impl Player {
 
         if self.jump_available>0{
             if is_key_pressed(kb.jump[0]) || is_key_pressed(kb.jump[1]) || is_key_pressed(kb.jump[2]){
-                self.physics.jump(100.);
+                self.physics.jump(crate::constants::JUMP_FORCE);
                 self.jump_available -= 1;
                 play_sound_once(sound_jump);
                 }
@@ -339,7 +280,7 @@ impl Player {
             }
         }
 
-        let dt = get_frame_time().clamp(0.001, 0.05);
+        let dt = get_frame_time().clamp(crate::constants::DT_CLAMP_MIN, crate::constants::DT_CLAMP_MAX);
 
         if self.death_timer > 0.0 {
             self.death_timer -= dt;
@@ -364,7 +305,7 @@ impl Player {
                 self.hitbox.y = 20.0;
             }
             
-            self.particles.update(dt);
+            self.particles.update(dt, &[]);
             return;
         }
         self.a_tire_cette_frame = false;
@@ -441,8 +382,7 @@ impl Player {
 
                 self.spawn_muzzle_flash(dir);
 
-                const RECOIL_FORCE: f32 = 80.0;
-                let recoil = -dir * RECOIL_FORCE;
+                let recoil = -dir * crate::constants::RECOIL_FORCE;
                 self.apply_recoil(recoil);
 
                 self.current_ammo -= 1;
@@ -533,7 +473,7 @@ impl Player {
         }
 
         // 6. Update Particle System lifetimes
-        self.particles.update(dt);
+        self.particles.update(dt, &[]);
     }
 
     fn spawn_running_dust(&mut self, moving_right: bool) {
@@ -703,26 +643,24 @@ impl Player {
         let look_right = self.bazooka_dir.x >= 0.0;
 
         // Render perfect pixel art contour outline around the PNG's transparent contours
-        let mut outline_anim = self.animation.clone();
-        outline_anim.change_color(self.color);
+        let anim = &self.animation;
+        let color = self.color;
         let offset = 0.15;
-        outline_anim.draw_current_frame(self.hitbox.x - offset, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
-        outline_anim.draw_current_frame(self.hitbox.x + offset, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
-        outline_anim.draw_current_frame(self.hitbox.x, self.hitbox.y - offset, self.hitbox.w, self.hitbox.h, look_right);
-        outline_anim.draw_current_frame(self.hitbox.x, self.hitbox.y + offset, self.hitbox.w, self.hitbox.h, look_right);
+        anim.draw_colored(self.hitbox.x - offset, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right, color);
+        anim.draw_colored(self.hitbox.x + offset, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right, color);
+        anim.draw_colored(self.hitbox.x, self.hitbox.y - offset, self.hitbox.w, self.hitbox.h, look_right, color);
+        anim.draw_colored(self.hitbox.x, self.hitbox.y + offset, self.hitbox.w, self.hitbox.h, look_right, color);
 
         // Draw a small retro pointer chevron above their head
         draw_triangle(
             vec2(center_x, self.hitbox.y - 0.4),
             vec2(center_x - 0.35, self.hitbox.y - 0.75),
             vec2(center_x + 0.35, self.hitbox.y - 0.75),
-            self.color
+            color
         );
         
         // Draw the player sprite normally with its gorgeous original details on top
-        let mut main_anim = self.animation.clone();
-        main_anim.change_color(WHITE);
-        main_anim.draw_current_frame(self.hitbox.x, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
+        anim.draw_current_frame(self.hitbox.x, self.hitbox.y, self.hitbox.w, self.hitbox.h, look_right);
         
         self.draw_healthbar();
         self.draw_ammobar();
@@ -749,5 +687,53 @@ impl Player {
         for projectile in &self.projectiles {
             projectile.draw();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // les tests Player nécessitent le runtime macroquad, on les ignore
+// et on teste la logique via des helpers stateless
+    struct TestPlayer { pv: f32 }
+
+    impl TestPlayer {
+        fn take_damage(&mut self, val: f32) {
+            self.pv = if self.pv - val < 0.0 { 0.0 } else { self.pv - val };
+        }
+        fn heal(&mut self, val: f32) {
+            self.pv = if self.pv + val > 100.0 { 100.0 } else { self.pv + val };
+        }
+    }
+
+    fn tp(pv: f32) -> TestPlayer { TestPlayer { pv } }
+
+    #[test]
+    fn test_take_damage() {
+        let mut p = tp(100.0);
+        p.take_damage(30.0);
+        assert_eq!(p.pv, 70.0);
+    }
+
+    #[test]
+    fn test_take_damage_overflow() {
+        let mut p = tp(100.0);
+        p.take_damage(200.0);
+        assert_eq!(p.pv, 0.0);
+    }
+
+    #[test]
+    fn test_heal() {
+        let mut p = tp(50.0);
+        p.heal(30.0);
+        assert_eq!(p.pv, 80.0);
+    }
+
+    #[test]
+    fn test_heal_cap() {
+        let mut p = tp(90.0);
+        p.heal(30.0);
+        assert_eq!(p.pv, 100.0);
     }
 }

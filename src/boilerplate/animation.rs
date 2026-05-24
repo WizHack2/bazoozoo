@@ -85,14 +85,14 @@ impl Animation {
         self.color =  color;
     }
 
-    pub fn draw_current_frame(&self, x: f32, y: f32, w: f32, h: f32, look_right: bool) {
+    pub fn draw_colored(&self, x: f32, y: f32, w: f32, h: f32, look_right: bool, color: Color) {
         if let Some(tex) = &self.spritesheet {
             let fw = tex.width() / self.cols as f32;
             let fh = tex.height() / self.rows as f32;
             let source_rect = Rect::new(self.current_frame as f32 * fw, self.current_row as f32 * fh, fw, fh);
 
             draw_texture_ex(
-                tex, x, y, self.color,
+                tex, x, y, color,
                 DrawTextureParams { 
                     source: Some(source_rect),
                     dest_size: Some(vec2(w, h)),
@@ -103,5 +103,9 @@ impl Animation {
         } else {
             draw_rectangle(x, y, w, h, GREEN);
         }
+    }
+
+    pub fn draw_current_frame(&self, x: f32, y: f32, w: f32, h: f32, look_right: bool) {
+        self.draw_colored(x, y, w, h, look_right, self.color);
     }
 }
